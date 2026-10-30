@@ -272,7 +272,8 @@ def _personagens_de_colunas(linhas: list[str]) -> list[Personagem]:
         if m and ordem:
             polo = ordem.pop(0)
             out.append(Personagem(papel="autor" if polo == "ativo" else "reu", polo=polo, nome=espaco(m.group(1)),
-                                  linha=s, documento="evento: lista de partes (colunas AUTOR e RÉU)", acesso="publico"))
+                                  linha=espaco(m.group(1)),  # só o nome: o documento de identificação não vira evidência
+                                  documento="evento: lista de partes (colunas AUTOR e RÉU)", acesso="publico"))
     return out
 
 

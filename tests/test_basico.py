@@ -631,5 +631,31 @@ class TesteEprocSentenca(unittest.TestCase):
         self.assertEqual(c.estado, campos.NV)   # coluna mostra só uma parte: nunca vira NAO
 
 
+class TesteCpf(unittest.TestCase):
+    def test_cpf_nao_vai_para_evidencia_nem_para_valor(self):
+        txt = ("#! cnj: 0000003-50.2025.8.99.0000" + chr(10) + "=== INTEGRA decisao-1 ===" + chr(10)
+               + "Homologo o acordo de FULANO SINTETICO (123.456.789-09) com a parte." + chr(10) + "=== FIM ===" + chr(10))
+        cs = campos.extrair(parser.ler(txt), ["X"])
+        for c in cs:
+            self.assertNotRegex(c.evidencia or "", "[0-9]{3}[.][0-9]{3}[.][0-9]{3}-[0-9]{2}", c.campo)
+            self.assertNotRegex(c.valor or "", "[0-9]{3}[.][0-9]{3}[.][0-9]{3}-[0-9]{2}", c.campo)
+        acordo = next(c for c in cs if c.campo == "acordo")
+        self.assertIn("***.***.***-**", acordo.evidencia)
+        self.assertTrue(acordo.evidencia_confere)  # a conferência literal aconteceu antes da máscara
+
+    def test_parte_das_colunas_guarda_so_o_nome(self):
+        nl = chr(10)
+        txt = ("#! cnj: 0000002-65.2025.8.99.0000" + nl + "AUTOR" + chr(9) + "RÉU" + nl
+               + "FULANO SINTETICO (123.456.789-09)" + chr(160) + " - Pessoa Física" + nl
+               + "EMPRESA ALFA SINTETICA LTDA (00.000.000/0001-00)" + chr(160) + " - Pessoa Jurídica" + nl
+               + "Informações Adicionais" + nl)
+        p = parser.ler(txt)
+        for per in p.personagens:
+            self.assertNotIn("(", per.linha)
+        c = campos.partes(p, ["EMPRESA ALFA"])
+        self.assertEqual(c.evidencia, "EMPRESA ALFA SINTETICA LTDA")
+        self.assertTrue(campos.extrair(p, ["EMPRESA ALFA"])[0].evidencia_confere)
+
+
 if __name__ == "__main__":
     unittest.main()

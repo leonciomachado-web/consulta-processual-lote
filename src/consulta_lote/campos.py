@@ -557,6 +557,14 @@ def compara_fase(fase_base: str | None, fase_tribunal: Campo) -> str:
     return "base_defasada" if ETAPAS[eb] < ETAPAS[et] else "base_adiantada"
 
 
+_CPF = re.compile("[0-9]{3}[.][0-9]{3}[.][0-9]{3}-[0-9]{2}")
+
+
+def mascara_cpf(texto: str) -> str:
+    """CPF de pessoa física não é gravado em evidência nem em valor (CNPJ de empresa permanece)."""
+    return _CPF.sub("***.***.***-**", texto or "")
+
+
 def extrair(p: Processo, partes_alvo: list[str]) -> list[Campo]:
     pc = partes(p, partes_alvo)
     campos: list[Campo] = [pc, parte_citada(p, partes_alvo), fase(p)]
@@ -567,6 +575,7 @@ def extrair(p: Processo, partes_alvo: list[str]) -> list[Campo]:
     agora = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     for c in campos:
         _confere(p, c)
+        c.evidencia, c.valor = mascara_cpf(c.evidencia), mascara_cpf(c.valor)  # depois da conferência literal
         c.revisao = c.revisao or "pendente"
         c.data_da_fonte = c.data_da_fonte or ""
         # regra final: SIM ou NAO sem trecho literal viram NAO_VISIVEL
