@@ -264,8 +264,11 @@ def acordo(p: Processo) -> Campo:
     neg = _acha_em_movimentos(p, R_ACORDO_NAO) or _acha_em_documentos(p, R_ACORDO_NAO)
     pos = _acha_em_movimentos(p, R_ACORDO) or _acha_em_documentos(p, R_ACORDO)
     if neg and pos:  # as fontes se contradizem: não decide, manda para revisão
-        c = _nv("acordo", "conflito_entre_fontes", "há texto de acordo homologado e texto de acordo não alcançado")
-        c.evidencia = pos[1]
+        origem, trecho = pos
+        valor = "há texto de acordo homologado e texto de acordo não alcançado"
+        c = (_campo_de_mov("acordo", NV, valor, origem, trecho) if isinstance(origem, Movimento)
+             else _campo_de_doc("acordo", NV, valor, origem, trecho))
+        c.estado, c.motivo = NV, "conflito_entre_fontes"  # mantém origem e acesso do trecho
         return c
     if neg:  # texto positivo que afirma o negativo (ex.: ata: conciliação não alcançada)
         origem, trecho = neg
@@ -330,6 +333,7 @@ def _decisao_existencia(p: Processo) -> list[Campo]:
                 juizo.localizacao = c.localizacao
                 juizo.fonte = c.fonte
                 juizo.data_da_fonte = c.data_da_fonte
+                juizo.acesso_documento = c.acesso_documento
             return [c, juizo]
     achado = _acha_em_documentos(p, R_DISPOSITIVO)
     if achado:
@@ -338,6 +342,7 @@ def _decisao_existencia(p: Processo) -> list[Campo]:
         juizo.evidencia = trecho
         juizo.localizacao = c.localizacao
         juizo.fonte = c.fonte
+        juizo.acesso_documento = c.acesso_documento
         return [c, juizo]
     return [_nv("decisao", _motivo_ausencia(p)), juizo]
 
@@ -377,18 +382,18 @@ def classificar_resultado(p: Processo):
         for linha in seg:
             n = norm(linha)
             if R_DESFAV.search(n):
-                return "DESFAVORÁVEL", espaco(linha), f"documento {d.rotulo}", f"documento: {d.rotulo}"
+                return "DESFAVORÁVEL", espaco(linha), f"documento {d.rotulo}", f"documento: {d.rotulo}", d.acesso
         for linha in seg:
             if R_FAV.search(norm(linha)):
-                return "FAVORÁVEL", espaco(linha), f"documento {d.rotulo}", f"documento: {d.rotulo}"
+                return "FAVORÁVEL", espaco(linha), f"documento {d.rotulo}", f"documento: {d.rotulo}", d.acesso
     for mv in p.movimentos:  # texto de sentença no próprio movimento
         if _evidencia_de_decisao(mv) or "sentenca" in norm(mv.tipo):
             for linha in mv.texto.split("\n"):
                 n = norm(linha)
                 if R_DESFAV.search(n):
-                    return "DESFAVORÁVEL", espaco(linha), f"movimento {mv.indice} ({mv.tipo})", f"movimento: {mv.tipo}"
+                    return "DESFAVORÁVEL", espaco(linha), f"movimento {mv.indice} ({mv.tipo})", f"movimento: {mv.tipo}", "publico"
                 if R_FAV.search(n):
-                    return "FAVORÁVEL", espaco(linha), f"movimento {mv.indice} ({mv.tipo})", f"movimento: {mv.tipo}"
+                    return "FAVORÁVEL", espaco(linha), f"movimento {mv.indice} ({mv.tipo})", f"movimento: {mv.tipo}", "publico"
     return None
 
 
@@ -402,12 +407,12 @@ def decisao(p: Processo, parte_passiva: bool = False) -> list[Campo]:
     r = classificar_resultado(p)
     if r is None:
         return campos
-    rotulo, trecho, loc, fonte = r
+    rotulo, trecho, loc, fonte, acesso = r
     juizo.estado, juizo.motivo = SIM, ""
     juizo.valor = (f"{rotulo} (sugestão por regra; revisão humana pendente). Critério: condenação a pagar ou "
                    "ressarcir é desfavorável; sem condenação é favorável.")
     juizo.evidencia, juizo.localizacao, juizo.fonte = trecho, loc, fonte
-    juizo.acesso_documento = "restrito_login_ou_senha" if fonte.startswith("documento") else "publico"
+    juizo.acesso_documento = acesso  # vem do Documento, não é inferido pelo prefixo da fonte
     juizo.confianca, juizo.revisao = "regra", "pendente"
     return campos
 

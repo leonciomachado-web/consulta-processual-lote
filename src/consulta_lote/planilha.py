@@ -69,8 +69,8 @@ def gerar(con: sqlite3.Connection, destino: Path, incluir_trechos_restritos: boo
                 continue
             linha.append(_txt(r[1], r[2] or "", r[3] or ""))
             if r[4]:
-                restrito = (r[6] or "").startswith("restrito")
-                trecho = "[trecho omitido: documento obtido com login]" if (restrito and not incluir_trechos_restritos) else f"“{r[4]}”"
+                nao_publico = (r[6] or "") != "publico"  # só mostra o trecho se for explicitamente público
+                trecho = "[trecho omitido: documento não público]" if (nao_publico and not incluir_trechos_restritos) else f"“{r[4]}”"
                 evid.append(f"{chave}: {trecho} ({r[5]}; acesso: {r[6] or 'nao_informado'})")
         fase_c = linhas.get("fase")
         cmp_ = "indeterminado"

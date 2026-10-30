@@ -452,5 +452,83 @@ class TesteSeguranca2(unittest.TestCase):
                 config.dados_dir(Path(t) / "dados", criar=False)
 
 
+class TesteSeguranca3(unittest.TestCase):
+    def _proc(self):
+        return parser.ler("#! cnj: 0000003-50.2025.8.99.0000" + chr(10) + "Processo Nº 0000003-50.2025.8.99.0000" + chr(10))
+
+    def _pasta(self, d, arquivos):
+        pasta = d / "documentos" / "0000003-50.2025.8.99.0000"
+        pasta.mkdir(parents=True)
+        for nome, texto in arquivos.items():
+            (pasta / nome).write_text(texto, encoding="utf-8")
+
+    def test_sigilo_tolerante_a_formato_e_falha_fechado(self):
+        from consulta_lote import cli
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            self._pasta(d, {
+                "1-a.txt": "NÍVEL DE SIGILO : 0 (Público)",
+                "2-b.txt": "Nível de Sigilo: 2 (Sigilo mínimo)",
+                "3-c.txt": "Nível de Sigilo: ilegível",
+                "4-d.txt": "Nível de Sigilo: 0" + chr(10) + "mais abaixo" + chr(10) + "Nível de Sigilo: 1",
+                "5-e.txt": "sem cabeçalho nenhum",
+            })
+            p = self._proc()
+            self.assertEqual(cli._carregar_documentos(d, p), 2)
+            por = {doc.rotulo: doc.acesso for doc in p.documentos}
+            self.assertEqual(por, {"1-a": "restrito_login_ou_senha", "5-e": "nao_testado"})
+
+    def test_sigilo_do_processo_inteiro_vale_para_os_documentos(self):
+        from consulta_lote import cli
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            self._pasta(d, {"processo-completo.txt": "Nível de Sigilo: 0 (Público)", "1-a.txt": "sem cabeçalho"})
+            p = self._proc()
+            self.assertEqual(cli._carregar_documentos(d, p), 1)
+            self.assertEqual(p.documentos[0].acesso, "restrito_login_ou_senha")
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            self._pasta(d, {"processo-completo.txt": "Nível de Sigilo: 1 (Segredo)", "1-a.txt": "texto"})
+            self.assertEqual(cli._carregar_documentos(d, self._proc()), 0)
+
+    def test_conflito_de_acordo_preserva_origem_e_acesso(self):
+        txt = ("#! cnj: 0000003-50.2025.8.99.0000" + chr(10) + "=== INTEGRA ata-1 ===" + chr(10)
+               + "Realizada proposta de conciliação, esta não foi alcançada." + chr(10) + "=== FIM ===" + chr(10)
+               + "=== INTEGRA decisao-2 ===" + chr(10) + "Homologo o acordo celebrado entre as partes." + chr(10)
+               + "=== FIM ===" + chr(10))
+        p = parser.ler(txt)
+        for doc in p.documentos:
+            doc.acesso = "restrito_login_ou_senha"
+        c = campos.acordo(p)
+        self.assertEqual(c.motivo, "conflito_entre_fontes")
+        self.assertEqual(c.acesso_documento, "restrito_login_ou_senha")
+        self.assertIn("decisao-2", c.fonte)
+
+    def test_resultado_da_decisao_herda_o_acesso_do_documento(self):
+        txt = ("#! cnj: 0000003-50.2025.8.99.0000" + chr(10) + "=== INTEGRA sentenca-1 ===" + chr(10)
+               + "RÉU: EMPRESA ALFA SINTETICA LTDA." + chr(10) + "DISPOSITIVO" + chr(10)
+               + "Isto posto, JULGO IMPROCEDENTE o pedido." + chr(10) + "=== FIM ===" + chr(10))
+        p = parser.ler(txt)
+        p.documentos[0].acesso = "nao_testado"
+        j = next(c for c in campos.extrair(p, ["EMPRESA ALFA"]) if c.campo == "decisao_juizo")
+        self.assertEqual(j.acesso_documento, "nao_testado")
+
+    def test_planilha_omite_tudo_que_nao_e_explicitamente_publico(self):
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            con = db.abrir(d)
+            txt = ("#! cnj: 0000003-50.2025.8.99.0000" + chr(10) + "=== INTEGRA decisao-2 ===" + chr(10)
+                   + "Homologo o acordo celebrado entre as partes." + chr(10) + "=== FIM ===" + chr(10))
+            p = parser.ler(txt)
+            p.documentos[0].acesso = "nao_testado"
+            db.gravar(con, d, p.cnj, p.sistema, "", None, "a", campos.extrair(p, ["X"]))
+            from openpyxl import load_workbook
+            saida = planilha.gerar(con, d / "p.xlsx", incluir_trechos_restritos=False)
+            ev = [c.value for c in load_workbook(saida)["Processos"][2] if c.value and "acordo:" in str(c.value)][0]
+            self.assertIn("[trecho omitido", ev)
+            self.assertNotIn("Homologo", ev)
+            con.close()
+
+
 if __name__ == "__main__":
     unittest.main()

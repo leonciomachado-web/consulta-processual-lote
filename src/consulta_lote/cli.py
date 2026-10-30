@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -76,20 +77,46 @@ def _carregar_documentos(d: Path, proc) -> int:
     O arquivo do processo inteiro não entra: a análise usa os documentos separados."""
     pasta = d / "documentos" / proc.cnj.formatado
     n = 0
-    if pasta.is_dir():
-        for arq in sorted(pasta.glob("*.txt")):
-            if arq.stem == "processo-completo":
-                continue
-            texto = arq.read_text(encoding="utf-8")
-            i = texto.find("Sigilo:")  # cabeçalho do PJe: "Nível de Sigilo: 0 (Público)"
-            if i >= 0:
-                nivel = texto[i + 7:].strip()[:1]
-                if nivel.isdigit() and nivel != "0":
-                    print(f"  pulei {arq.name}: nível de sigilo {nivel} (não é público)")
-                    continue
-            proc.documentos.append(parser.Documento(rotulo=arq.stem, texto=texto, acesso="restrito_login_ou_senha"))
-            n += 1
+    if not pasta.is_dir():
+        return 0
+    # Sigilo falha fechado: só entra documento com sigilo explicitamente 0 (público). Valor ilegível
+    # ou diferente de 0 é tratado como não público. Cabeçalho ausente fica "nao_testado".
+    completo = pasta / "processo-completo.txt"
+    niveis_proc = _niveis_de_sigilo(completo.read_text(encoding="utf-8")) if completo.exists() else []
+    if any(not _e_publico(v) for v in niveis_proc):
+        print(f"  pulei todos os documentos de {proc.cnj.formatado}: o processo não tem sigilo 0 (público)")
+        return 0
+    processo_publico = bool(niveis_proc)
+    for arq in sorted(pasta.glob("*.txt")):
+        if arq.stem == "processo-completo":
+            continue
+        texto = arq.read_text(encoding="utf-8")
+        niveis = _niveis_de_sigilo(texto)
+        if any(not _e_publico(v) for v in niveis):
+            print(f"  pulei {arq.name}: sigilo não é 0 (público)")
+            continue
+        if niveis or processo_publico:
+            acesso = "restrito_login_ou_senha"  # sigilo 0 confirmado, obtido com login
+        else:
+            acesso = "nao_testado"
+            print(f"  atenção: {arq.name} sem cabeçalho de sigilo; carregado como nao_testado (confirmar à mão)")
+        proc.documentos.append(parser.Documento(rotulo=arq.stem, texto=texto, acesso=acesso))
+        n += 1
     return n
+
+
+_SIGILO = re.compile("n[ií]vel[ ]+de[ ]+sigilo[ ]*:[ ]*([^" + chr(10) + "]+)", re.IGNORECASE)
+
+
+def _niveis_de_sigilo(texto: str) -> list[str]:
+    return [v.strip() for v in _SIGILO.findall(texto)]
+
+
+def _e_publico(valor: str) -> bool:
+    v = valor.strip().lower()
+    if v.startswith("0"):
+        return not v[1:2].isdigit()  # "0" ou "0 (Público)"; "01" não
+    return v.startswith("público") or v.startswith("publico")
 
 
 def cmd_importar(a) -> int:
