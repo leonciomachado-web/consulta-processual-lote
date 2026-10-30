@@ -20,7 +20,7 @@ from pathlib import Path
 import yaml
 
 from . import campos as campos_mod
-from . import blocos, datajud, db, lista, parser, planilha
+from . import blocos, datajud, db, levantamento, lista, parser, planilha
 from .config import RAIZ_DO_PROGRAMA, DadosDirInvalido, dados_dir, proteger_escrita
 
 
@@ -167,38 +167,76 @@ def cmd_importar(a) -> int:
     return 0
 
 
+def _numeros_de(d: Path, a) -> list[str]:
+    import csv
+    if a.numeros:
+        return list(a.numeros)
+    arq = "elegiveis.csv" if a.todos else "piloto.csv"
+    with open(d / "saida" / arq, encoding="utf-8-sig") as f:
+        return [r["numero"] for r in csv.DictReader(f, delimiter=";")]
+
+
 def cmd_datajud(a) -> int:
+    import time
     from .cnj import tratar, hash_do_processo
     d = dados_dir(a.dados)
     cfg = _yaml(d / "datajud.local.yaml")
     chave, alias = cfg["chave"], cfg["alias"]
-    if a.numeros:
-        nums = list(a.numeros)
-    else:
-        import csv
-        with open(d / "saida" / "piloto.csv", encoding="utf-8-sig") as f:
-            nums = [r["numero"] for r in csv.DictReader(f, delimiter=";")]
+    nums = _numeros_de(d, a)
+    if a.limite:
+        nums = nums[: a.limite]
     pasta = proteger_escrita(d / "datajud")
     pasta.mkdir(exist_ok=True)
     con = db.abrir(d)
     seg = db.segredo_local(d)
-    achou = 0
+    achou = feitos = 0
     for n in nums:
         c = tratar(n)
         if c is None:
             print(f"{n}: número inválido, pulei")
             continue
         h = hash_do_processo(c, seg)
-        try:
-            resp = datajud.consultar_e_guardar(c, chave, alias, pasta, h)
-        except Exception as e:  # rede, chave, limite: para e reporta, não insiste
-            print(f"PAROU em {c.formatado}: {type(e).__name__}: {e}", file=sys.stderr)
-            return 3
+        for tentativa in range(4):  # o servidor limita: espera 5 minutos e tenta de novo, depois para
+            try:
+                resp = datajud.consultar_e_guardar(c, chave, alias, pasta, h)
+                break
+            except Exception as e:
+                print(f"{c.formatado}: {type(e).__name__}: {e} (tentativa {tentativa + 1} de 4)", file=sys.stderr, flush=True)
+                if tentativa == 3:
+                    print(f"PAROU em {c.formatado}. Rode de novo: o cache retoma de onde parou.", file=sys.stderr, flush=True)
+                    return 3
+                time.sleep(300)
         db.gravar_extra(con, d, c, datajud.campos_do_datajud(resp))
         r = datajud.resumo(resp)
+        feitos += 1
         achou += 1 if r["encontrado"] else 0
-        print(f"{c.formatado} {h} encontrado={r['encontrado']} movimentos={r.get('movimentos')} sistema_datajud={r.get('sistema_no_datajud')}")
+        print(f"{feitos}/{len(nums)} {c.formatado} encontrado={r['encontrado']}", flush=True)
     print(f"{achou}/{len(nums)} encontrados no DataJud.")
+    return 0
+
+
+def cmd_levantamento(a) -> int:
+    import collections
+    from .cnj import tratar, hash_do_processo
+    d = dados_dir(a.dados)
+    seg = db.segredo_local(d)
+    entradas = []
+    for n in _numeros_de(d, a):
+        c = tratar(n)
+        if c is None:
+            continue
+        arq = d / "datajud" / f"{hash_do_processo(c, seg)}.json"
+        resp = json.loads(arq.read_text(encoding="utf-8")) if arq.exists() else None
+        if resp is not None:
+            entradas.append((c, resp))
+    arq, linhas = levantamento.gerar(entradas, d / "saida" / "levantamento-datajud.csv")
+    print(arq)
+    print("processos com resposta em cache:", len(linhas))
+    print("por sistema provável:", dict(collections.Counter(l["sistema_provavel"] for l in linhas)))
+    print("não achados:", sum(1 for l in linhas if l["encontrado"] == "nao"))
+    print("com sentença registrada:", sum(1 for l in linhas if l["sentenca_em"]),
+          "| com trânsito:", sum(1 for l in linhas if l["transito_em"]),
+          "| com baixa:", sum(1 for l in linhas if l["baixa_em"]))
     return 0
 
 
@@ -266,7 +304,13 @@ def main(argv: list[str] | None = None) -> int:
     s.set_defaults(f=cmd_blocos)
     s = sub.add_parser("datajud")
     s.add_argument("numeros", nargs="*", help="números a consultar; sem argumento, usa o piloto.csv")
+    s.add_argument("--todos", action="store_true", help="todos os elegíveis (saida/elegiveis.csv)")
+    s.add_argument("--limite", type=int, help="consulta só os N primeiros")
     s.set_defaults(f=cmd_datajud)
+    s = sub.add_parser("levantamento")
+    s.add_argument("numeros", nargs="*")
+    s.add_argument("--todos", action="store_true", help="todos os elegíveis; sem isso usa o piloto")
+    s.set_defaults(f=cmd_levantamento)
     a = ap.parse_args(argv)
     try:
         return a.f(a)

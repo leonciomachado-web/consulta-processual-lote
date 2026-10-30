@@ -679,5 +679,29 @@ class TesteCpfVariantes(unittest.TestCase):
         self.assertNotRegex(ev or "", "[0-9]{3}[.][0-9]{1,3}")
 
 
+class TesteLevantamento(unittest.TestCase):
+    def _resp(self, codigos, sistema="Projudi"):
+        movs = [{"codigo": c, "nome": "x", "dataHora": "2026-0%d-10T10:00:00.000Z" % (i + 1)} for i, c in enumerate(codigos)]
+        return {"hits": {"hits": [{"_source": {"sistema": {"nome": sistema}, "grau": "G1", "movimentos": movs,
+                                                "orgaoJulgador": {"nome": "VARA"}, "classe": {"nome": "Comum"},
+                                                "dataAjuizamento": "20250110090000",
+                                                "dataHoraUltimaAtualizacao": "2026-09-01T10:00:00Z"}}]}}
+
+    def test_triagem_por_marcos_e_sistema(self):
+        from consulta_lote import levantamento as lv
+        c = cnj.tratar(FICT1)
+        self.assertEqual(lv.linha(c, None)["encontrado"], "nao")
+        migrado = lv.linha(c, self._resp([15417]))
+        self.assertEqual(migrado["sistema_provavel"], "eproc")
+        self.assertEqual(migrado["migrado_em"], "10/01/2026")
+        sent = lv.linha(c, self._resp([219]))
+        self.assertTrue(sent["sentenca_em"])
+        self.assertIn("ler a sentença", sent["proximo_passo"])
+        enc = lv.linha(c, self._resp([219, 848, 22], sistema="PJe"))
+        self.assertEqual(enc["sistema_provavel"], "pje")
+        self.assertIn("encerrado", enc["proximo_passo"])
+        self.assertEqual(lv.linha(c, self._resp([85]))["sistema_provavel"], "legado")
+
+
 if __name__ == "__main__":
     unittest.main()
