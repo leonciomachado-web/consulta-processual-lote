@@ -595,6 +595,41 @@ class TesteEproc(unittest.TestCase):
         for c in self.c:
             self.assertTrue(c.evidencia_confere, c.campo)
 
+    def test_cabecalho_de_colunas_nao_vira_parte(self):
+        p = parser.ler("AUTOR" + chr(9) + "RÉU" + chr(10) + "AUTOR   RÉU" + chr(10))
+        self.assertEqual(p.personagens, [])
+
+
+class TesteEprocSentenca(unittest.TestCase):
+    def _txt(self, titulo):
+        nl = chr(10)
+        return ("#! sistema: eproc" + nl + "#! cnj: 0000002-65.2025.8.99.0000" + nl + "#! movimentos_lista_completa: sim" + nl
+                + "AUTOR" + chr(9) + "RÉU" + nl + nl + "FULANO SINTETICO (000.000.000-00)" + chr(160) + " - Pessoa Física" + nl
+                + "EMPRESA ALFA SINTETICA LTDA (00.000.000/0001-00)" + chr(160) + " - Pessoa Jurídica" + nl + "e outros" + nl
+                + "Informações Adicionais" + nl + "Eventos" + nl + nl
+                + "3" + chr(160) + nl + chr(9) + "10/06/2026 10:00:00" + chr(9) + titulo + chr(9) + nl + "SENT1" + nl + nl
+                + "1" + chr(160) + nl + chr(9) + "10/01/2026 09:00:00" + chr(9) + "Juntado(a) - Petição Inicial" + chr(9) + nl + "SISTEMA" + nl)
+
+    def test_julgado_improcedente_e_favoravel_a_reu(self):
+        p = parser.ler(self._txt("Julgado improcedente o pedido"))
+        cs = campos.extrair(p, ["EMPRESA ALFA"])
+        self.assertEqual(estado(cs, "decisao").estado, campos.SIM)
+        self.assertIn("FAVORÁVEL", estado(cs, "decisao_juizo").valor)
+        self.assertNotIn("DESFAVORÁVEL", estado(cs, "decisao_juizo").valor)
+        self.assertEqual(estado(cs, "fase").valor, "sentenciado")
+
+    def test_julgado_procedente_e_desfavoravel(self):
+        cs = campos.extrair(parser.ler(self._txt("Julgado procedente em parte o pedido")), ["EMPRESA ALFA"])
+        self.assertIn("DESFAVORÁVEL", estado(cs, "decisao_juizo").valor)
+
+    def test_partes_pelas_colunas_autor_e_reu(self):
+        p = parser.ler(self._txt("Julgado improcedente o pedido"))
+        polos = {(x.polo, x.nome) for x in p.personagens}
+        self.assertIn(("ativo", "FULANO SINTETICO"), polos)
+        self.assertIn(("passivo", "EMPRESA ALFA SINTETICA LTDA"), polos)
+        c = campos.partes(p, ["OUTRA EMPRESA"])
+        self.assertEqual(c.estado, campos.NV)   # coluna mostra só uma parte: nunca vira NAO
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -76,7 +76,9 @@ R_PERICIA_FORTE = re.compile(r"nomeio .{0,25}perit|laudo pericial|honorarios per
 _MESES_EXT = {"janeiro": 1, "fevereiro": 2, "marco": 3, "abril": 4, "maio": 5, "junho": 6, "julho": 7,
               "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12}
 R_DOC_DECISAO = re.compile(r"^\d{5,} - (sentenca|acordao)\b")
-R_TIPO_DECISAO = re.compile(r"^(sentenca|acordao)\b")
+R_TIPO_DECISAO = re.compile(r"^(sentenca|acordao|julgad[oa]s? (parcialmente )?(procedente|improcedente)|julgad[oa]s? procedente em parte|extint[oa] o processo)")
+R_EV_DESFAV = re.compile(r"^julgad[oa]s? (parcialmente )?procedente|^julgad[oa]s? procedente em parte")
+R_EV_FAV = re.compile(r"^julgad[oa]s? improcedente|^extint[oa] o processo")
 R_SANEAMENTO = re.compile(r"saneamento|audiencia de instrucao|audiencia de conciliacao")
 R_POSTULATORIA = re.compile(r"citacao|contestacao|\bresposta\b|carta de citacao")
 
@@ -300,6 +302,9 @@ def _evidencia_de_decisao(mv: Movimento) -> str | None:
     """Linha que prova sentença ou acórdão: o tipo do movimento ou um documento 'número - Sentença'.
     'Projeto de Sentença' não conta: é minuta, não decisão."""
     if R_TIPO_DECISAO.match(norm(mv.tipo)):
+        for linha in mv.texto.split("\n"):
+            if espaco(mv.tipo) in espaco(linha):
+                return espaco(linha)
         return espaco(mv.texto.split("\n")[0])
     for linha in mv.texto.split("\n"):
         if R_DOC_DECISAO.match(norm(linha)):
@@ -388,6 +393,13 @@ def classificar_resultado(p: Processo):
         for linha in seg:
             if R_FAV.search(norm(linha)):
                 return "FAVORÁVEL", espaco(linha), f"documento {d.rotulo}", f"documento: {d.rotulo}", d.acesso
+    for mv in p.movimentos:  # título do evento (eproc): "Julgado improcedente o pedido"
+        nt = norm(mv.tipo)
+        evid = _evidencia_de_decisao(mv)
+        if evid and R_EV_DESFAV.match(nt):
+            return "DESFAVORÁVEL", evid, f"movimento {mv.indice} ({mv.tipo})", f"movimento: {mv.tipo}", "publico"
+        if evid and R_EV_FAV.match(nt):
+            return "FAVORÁVEL", evid, f"movimento {mv.indice} ({mv.tipo})", f"movimento: {mv.tipo}", "publico"
     for mv in p.movimentos:  # texto de sentença no próprio movimento
         if _evidencia_de_decisao(mv) or "sentenca" in norm(mv.tipo):
             for linha in mv.texto.split("\n"):

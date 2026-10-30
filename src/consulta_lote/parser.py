@@ -107,7 +107,7 @@ def _extrai_personagens(linhas: list[str]) -> list[Personagem]:
             continue
         # linha de tabela: "Autor<TAB>NOME" ou "Autor   NOME"
         partes = re.split(r"\t+|\s{2,}", l, maxsplit=1)
-        if len(partes) == 2 and norm(partes[0]) in PAPEIS:
+        if len(partes) == 2 and norm(partes[0]) in PAPEIS and norm(partes[1]) not in PAPEIS:  # 'AUTOR  RÉU' é cabeçalho de colunas
             _adiciona(out, norm(partes[0]), partes[1], l)
             papel_atual = None
             continue
@@ -252,6 +252,30 @@ def _personagens_de_eventos(movs: list[Movimento]) -> list[Personagem]:
     return out
 
 
+_RE_PESSOA_COLUNA = re.compile("^(.+?)[ ]*[(]([0-9.]{9,14}[-/0-9]*)[)][ ]*-[ ]*Pessoa (F[ií]sica|Jur[ií]dica)")
+
+
+def _personagens_de_colunas(linhas: list[str]) -> list[Personagem]:
+    """Lista 'Partes e Representantes' do eproc: cabeçalho 'AUTOR RÉU' e, abaixo, a primeira parte de
+    cada coluna (a coluna só mostra uma parte e 'e outros'). A primeira pessoa é do polo ativo e a
+    segunda do polo passivo. Fonte parcial: nunca serve para afirmar que a parte NÃO consta."""
+    out: list[Personagem] = []
+    i = next((k for k, l in enumerate(linhas) if norm(l.replace(chr(9), " ")) == "autor reu"), None)
+    if i is None:
+        return out
+    ordem = ["ativo", "passivo"]
+    for l in linhas[i + 1:]:
+        s = espaco(l)
+        if s.lower().startswith(("informações adicionais", "informacoes adicionais")):
+            break
+        m = _RE_PESSOA_COLUNA.match(s)
+        if m and ordem:
+            polo = ordem.pop(0)
+            out.append(Personagem(papel="autor" if polo == "ativo" else "reu", polo=polo, nome=espaco(m.group(1)),
+                                  linha=s, documento="evento: lista de partes (colunas AUTOR e RÉU)", acesso="publico"))
+    return out
+
+
 def _junta_personagens(da_lista: list[Personagem], dos_eventos: list[Personagem]) -> list[Personagem]:
     """Lista da capa mais partes que os eventos identificam pelo polo, sem duplicar o mesmo nome."""
     out = list(da_lista)
@@ -314,7 +338,7 @@ def ler(texto_bruto: str) -> Processo:
         meta=meta,
         capa=capa,
         distribuicao=dist,
-        personagens=_junta_personagens(_extrai_personagens(corpo), _personagens_de_eventos(eventos)),
+        personagens=_junta_personagens(_extrai_personagens(corpo), _personagens_de_eventos(eventos) + _personagens_de_colunas(corpo)),
         movimentos=eventos,
         documentos=docs,
         texto=texto,
