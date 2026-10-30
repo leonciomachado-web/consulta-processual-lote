@@ -17,8 +17,10 @@ from .campos import NV, SIM, Campo
 from .cnj import Cnj
 from .config import proteger_escrita
 
-URL = "https://api-publica.datajud.cnj.jus.br/api_publica_{alias}/_search"
-INTERVALO_S = 1.2
+URL_BASE = "https://api-publica.datajud.cnj.jus.br/api_publica_{alias}"
+GRAUS = ("G1", "JE", "G2")  # primeira instância, juizado especial e segundo grau: um documento para cada
+INTERVALO_S = 0.5  # cada processo faz até 3 leituras diretas de ~0,5 s; fica bem abaixo de 120 por minuto
+
 
 # código da tabela processual unificada -> (campo, rótulo)
 CODIGOS = {
@@ -41,13 +43,23 @@ CAMPOS_DATAJUD = sorted({v[0] for v in CODIGOS.values()})
 
 
 def consultar(cnj: Cnj, chave: str, alias: str, timeout: int = 60) -> dict:
-    corpo = json.dumps({"query": {"match": {"numeroProcesso": cnj.digitos}}}).encode()
-    req = urllib.request.Request(
-        URL.format(alias=alias), data=corpo, method="POST",
-        headers={"Authorization": f"APIKey {chave}", "Content-Type": "application/json"},
-    )
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read().decode("utf-8"))
+    """Leitura direta por identificador (`_doc/<TRIBUNAL>_<GRAU>_<número>`). O `_search` do servidor leva ~20 s
+    por consulta; a leitura direta leva ~0,5 s. Devolve no formato de busca: {"hits": {"hits": [...]}}, com um
+    item por instância encontrada (G1, JE, G2). 404 significa que não existe naquela instância."""
+    achados = []
+    for grau in GRAUS:
+        url = URL_BASE.format(alias=alias) + f"/_doc/{alias.upper()}_{grau}_{cnj.digitos}"
+        req = urllib.request.Request(url, headers={"Authorization": f"APIKey {chave}"})
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                d = json.loads(r.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                continue
+            raise
+        if d.get("found", True) and d.get("_source"):
+            achados.append({"_id": d.get("_id"), "_source": d["_source"]})
+    return {"hits": {"hits": achados}}
 
 
 def consultar_e_guardar(cnj: Cnj, chave: str, alias: str, pasta: Path, h: str) -> dict:
@@ -73,6 +85,11 @@ def _fonte(resposta: dict) -> dict | None:
     return hits[0]["_source"] if hits else None
 
 
+def _todas(resposta: dict) -> list[dict]:
+    """Uma fonte por instância encontrada (G1, JE, G2), na ordem em que foram lidas."""
+    return [h["_source"] for h in resposta.get("hits", {}).get("hits", []) if h.get("_source")]
+
+
 def resumo(resposta: dict) -> dict:
     src = _fonte(resposta)
     if src is None:
@@ -94,7 +111,7 @@ def campos_do_datajud(resposta: dict) -> list[Campo]:
     if src is None:
         return [Campo(campo=c, estado=NV, motivo="nao_consultado", fonte="DataJud") for c in CAMPOS_DATAJUD]
     achados: dict[str, list[str]] = {}
-    for m in src.get("movimentos", []):
+    for m in [m for s in _todas(resposta) for m in s.get("movimentos", [])]:
         cod = m.get("codigo")
         if cod in CODIGOS:
             campo, rotulo = CODIGOS[cod]

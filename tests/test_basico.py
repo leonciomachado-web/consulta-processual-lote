@@ -822,5 +822,45 @@ class TesteTruncamentoNormalizado(unittest.TestCase):
                 self.assertNotRegex(n, "[0-9]{3}[^0-9A-Za-z]{0,6}[0-9]", (repr(corpo[:6]), corte))
 
 
+class TesteDatajudDireto(unittest.TestCase):
+    def test_leitura_direta_junta_as_instancias_e_trata_404(self):
+        import io, json as _json, urllib.error, urllib.request
+        from consulta_lote import datajud
+        c = cnj.tratar(FICT1)
+        chamadas = []
+
+        class R:
+            def __init__(self, corpo): self._c = corpo
+            def read(self): return _json.dumps(self._c).encode()
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+
+        def falso(req, timeout=0):
+            url = req.full_url
+            chamadas.append(url)
+            if "_G1_" in url or "_G2_" in url:
+                return R({"_id": url.rsplit("/", 1)[1], "found": True, "_source": {"grau": "G1" if "_G1_" in url else "G2", "movimentos": []}})
+            raise urllib.error.HTTPError(url, 404, "nao", {}, io.BytesIO(b"{}"))
+
+        antigo = urllib.request.urlopen
+        urllib.request.urlopen = falso
+        try:
+            resp = datajud.consultar(c, "chave", "tjxx")
+        finally:
+            urllib.request.urlopen = antigo
+        self.assertEqual([h["_source"]["grau"] for h in resp["hits"]["hits"]], ["G1", "G2"])
+        self.assertTrue(all("/_doc/TJXX_" in u for u in chamadas))   # leitura direta, nunca _search
+        self.assertEqual(len(chamadas), 3)
+
+    def test_levantamento_sinaliza_recurso_no_segundo_grau(self):
+        from consulta_lote import levantamento as lv
+        resp = {"hits": {"hits": [{"_source": {"grau": "G1", "sistema": {"nome": "Projudi"}, "movimentos": [{"codigo": 219, "dataHora": "2026-01-10T10:00:00Z"}]}},
+                                   {"_source": {"grau": "G2", "movimentos": [{"codigo": 848, "dataHora": "2026-03-10T10:00:00Z"}]}}]}}
+        l = lv.linha(cnj.tratar(FICT1), resp)
+        self.assertEqual(l["instancias"], "G1+G2")
+        self.assertTrue(l["sentenca_em"] and l["transito_em"])   # marcos das duas instâncias juntos
+        self.assertIn("2º grau", l["proximo_passo"])
+
+
 if __name__ == "__main__":
     unittest.main()

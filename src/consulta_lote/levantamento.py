@@ -12,7 +12,7 @@ from .cnj import Cnj
 from .datajud import CODIGOS
 
 COLUNAS = [
-    "numero", "encontrado", "sistema_datajud", "sistema_provavel", "grau", "orgao", "classe", "distribuicao",
+    "numero", "encontrado", "sistema_datajud", "sistema_provavel", "grau", "instancias", "orgao", "classe", "distribuicao",
     "atualizado", "movimentos", "migrado_em", "sentenca_em", "transito_em", "baixa_em", "acordo_em",
     "desistencia_em", "pericia_em", "ultimo_movimento", "proximo_passo",
 ]
@@ -45,7 +45,8 @@ def linha(cnj: Cnj, resposta: dict | None) -> dict:
         base.update(encontrado="nao", sistema_provavel="desconhecido",
                     proximo_passo="não achado no DataJud: procurar no eproc, no PJe e no portal do tribunal")
         return base
-    movs = src.get("movimentos", [])
+    fontes = [h["_source"] for h in resposta.get("hits", {}).get("hits", []) if h.get("_source")]
+    movs = [m for s in fontes for m in s.get("movimentos", [])]  # todas as instâncias juntas
     datas: dict[str, list[str]] = {g: [] for g in _GRUPOS}
     for m in movs:
         for g, codigos in _GRUPOS.items():
@@ -57,6 +58,7 @@ def linha(cnj: Cnj, resposta: dict | None) -> dict:
     provavel = "eproc" if migrado else ("pje" if sistema == "PJe" else ("legado" if sistema == "Projudi" else "desconhecido"))
     base.update(
         encontrado="sim", sistema_datajud=sistema, sistema_provavel=provavel, grau=src.get("grau", ""),
+        instancias="+".join(s.get("grau", "") for s in fontes),
         orgao=(src.get("orgaoJulgador") or {}).get("nome", ""), classe=(src.get("classe") or {}).get("nome", ""),
         distribuicao=_data(f"{(src.get('dataAjuizamento') or '')[:4]}-{(src.get('dataAjuizamento') or '')[4:6]}-{(src.get('dataAjuizamento') or '')[6:8]}"),
         atualizado=_data(src.get("dataHoraUltimaAtualizacao")), movimentos=len(movs),
@@ -75,6 +77,8 @@ def linha(cnj: Cnj, resposta: dict | None) -> dict:
 
 def _proximo_passo(l: dict) -> str:
     onde = {"eproc": "eproc", "pje": "PJe", "legado": "portal do legado", "desconhecido": "tribunal"}[l["sistema_provavel"]]
+    if "G2" in l["instancias"].split("+"):
+        return f"há registro no 2º grau (recurso): ver o acórdão e o trânsito no {onde}"
     if l["baixa_em"] and l["transito_em"]:
         return f"encerrado (trânsito e baixa registrados): conferir a data do trânsito na certidão, no {onde}"
     if l["baixa_em"]:
