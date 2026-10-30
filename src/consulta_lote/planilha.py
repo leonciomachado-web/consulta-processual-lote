@@ -36,7 +36,7 @@ def _txt(estado: str, valor: str, motivo: str) -> str:
     return f"{estado}: {valor}" if valor else estado
 
 
-def gerar(con: sqlite3.Connection, destino: Path) -> Path:
+def gerar(con: sqlite3.Connection, destino: Path, incluir_trechos_restritos: bool = True) -> Path:
     destino = proteger_escrita(destino)
     wb = Workbook()
     ws = wb.active
@@ -56,7 +56,7 @@ def gerar(con: sqlite3.Connection, destino: Path) -> Path:
         linhas = {
             r[0]: r
             for r in con.execute(
-                "SELECT campo,estado,valor,motivo_nao_visivel,evidencia_literal,localizacao FROM campo WHERE hash=?",
+                "SELECT campo,estado,valor,motivo_nao_visivel,evidencia_literal,localizacao,acesso_documento FROM campo WHERE hash=?",
                 (h,),
             )
         }
@@ -69,7 +69,9 @@ def gerar(con: sqlite3.Connection, destino: Path) -> Path:
                 continue
             linha.append(_txt(r[1], r[2] or "", r[3] or ""))
             if r[4]:
-                evid.append(f"{chave}: “{r[4]}” ({r[5]})")
+                restrito = (r[6] or "").startswith("restrito")
+                trecho = "[trecho omitido: documento obtido com login]" if (restrito and not incluir_trechos_restritos) else f"“{r[4]}”"
+                evid.append(f"{chave}: {trecho} ({r[5]}; acesso: {r[6] or 'nao_informado'})")
         fase_c = linhas.get("fase")
         cmp_ = "indeterminado"
         if fase_c:

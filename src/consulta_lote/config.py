@@ -37,6 +37,7 @@ def _raiz_git(p: Path) -> Path | None:
 ARTEFATOS = (
     ".dados-locais", "base.sqlite", "segredo.local", "saida/x.csv", "saida/x.xlsx", "original/x.xlsx",
     "entrada/x.txt", "datajud/x.json", "partes_alvo.local.yaml", "datajud.local.yaml",
+    "analises/x/blocos/x.md", "analises/x/blocos/versoes/x.md", "documentos/x/x.txt", "documentos/x/x.pdf",
 )
 
 

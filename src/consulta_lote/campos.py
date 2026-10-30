@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from .parser import Movimento, Personagem, Processo
 from .textos import espaco, norm
@@ -33,6 +33,7 @@ MOTIVOS = (
     "lista_parcial",
     "juizo_humano",
     "evidencia_nao_confere",
+    "conflito_entre_fontes",
 )
 
 
@@ -171,7 +172,7 @@ def _personagens_de_documentos(p: Processo) -> list[Personagem]:
     """Cabeçalho de sentença ou ata: 'RÉU: NOME' ou 'NOME (RÉU)'. Só lê o que está escrito."""
     out: list[Personagem] = []
     for d in p.documentos:
-        for linha in d.texto.split("\n"):
+        for linha in d.texto.split("\n")[:60]:  # só o cabeçalho do documento
             s = espaco(linha)
             m = R_PARTE_DOC.match(norm(s))
             if m:
@@ -183,13 +184,14 @@ def _personagens_de_documentos(p: Processo) -> list[Personagem]:
                     continue
                 nome, papel = m2.group(1).strip(), norm(m2.group(2))
             polo = "ativo" if papel in ("autor", "autora", "requerente") else "passivo"
-            out.append(Personagem(papel=papel, polo=polo, nome=nome, linha=s))
+            out.append(Personagem(papel=papel, polo=polo, nome=nome, linha=s, documento=d.rotulo, acesso=d.acesso))
     return out
 
 
 def partes(p: Processo, partes_alvo: list[str]) -> Campo:
     if not partes_alvo:
         return _nv("parte_alvo_no_polo_passivo", "nao_consultado", "nenhuma parte-alvo configurada")
+    de_documento = not p.personagens
     personagens = p.personagens or _personagens_de_documentos(p)
     if not personagens:
         return _nv("parte_alvo_no_polo_passivo", "nao_consultado", "lista de partes não colada; abra a aba de partes")
@@ -200,12 +202,13 @@ def partes(p: Processo, partes_alvo: list[str]) -> Campo:
                 campo="parte_alvo_no_polo_passivo",
                 estado=SIM,
                 valor="parte-alvo no polo passivo",
-                fonte="lista de personagens",
-                acesso_documento="publico",
+                fonte=f"documento: {per.documento}" if per.documento else "lista de personagens",
+                documento_origem=per.documento,
+                acesso_documento=per.acesso or "publico",
                 evidencia=per.linha,
-                localizacao=f"personagem ({per.papel})",
+                localizacao=f"cabeçalho de {per.documento}" if per.documento else f"personagem ({per.papel})",
             )
-    if p.partes_lista_completa:
+    if p.partes_lista_completa and not de_documento:
         # lista inteira lida e a parte-alvo não está no polo passivo
         no_ativo = any(per.polo == "ativo" and any(a in norm(per.nome) for a in alvos) for per in personagens)
         ev = personagens[0].linha
@@ -219,7 +222,8 @@ def partes(p: Processo, partes_alvo: list[str]) -> Campo:
             localizacao="lista completa de personagens",
             confianca="regra",
         )
-    return _nv("parte_alvo_no_polo_passivo", "lista_parcial", "a capa mostra só parte dos personagens")
+    # parte vinda só do cabeçalho de documento nunca vira NAO: não é lista completa
+    return _nv("parte_alvo_no_polo_passivo", "lista_parcial", "a capa ou o cabeçalho mostram só parte dos personagens")
 
 
 def pericia(p: Processo) -> list[Campo]:
@@ -258,6 +262,11 @@ def pericia(p: Processo) -> list[Campo]:
 
 def acordo(p: Processo) -> Campo:
     neg = _acha_em_movimentos(p, R_ACORDO_NAO) or _acha_em_documentos(p, R_ACORDO_NAO)
+    pos = _acha_em_movimentos(p, R_ACORDO) or _acha_em_documentos(p, R_ACORDO)
+    if neg and pos:  # as fontes se contradizem: não decide, manda para revisão
+        c = _nv("acordo", "conflito_entre_fontes", "há texto de acordo homologado e texto de acordo não alcançado")
+        c.evidencia = pos[1]
+        return c
     if neg:  # texto positivo que afirma o negativo (ex.: ata: conciliação não alcançada)
         origem, trecho = neg
         if isinstance(origem, Movimento):
@@ -308,8 +317,8 @@ def parte_citada(p: Processo, partes_alvo: list[str]) -> Campo:
     return _nv("parte_alvo_citada", "sem_mencao_em_movimento" if p.movimentos_lista_completa else "lista_parcial")
 
 
-def decisao(p: Processo) -> list[Campo]:
-    """Existência de sentença ou acórdão. O juízo "favorável" é sempre humano."""
+def _decisao_existencia(p: Processo) -> list[Campo]:
+    """Existência de sentença ou acórdão."""
     juizo = _nv("decisao_juizo", "juizo_humano", "revisão humana: favorável ou desfavorável à parte-alvo")
     for mv in p.movimentos:
         t = _evidencia_de_decisao(mv)
@@ -333,13 +342,92 @@ def decisao(p: Processo) -> list[Campo]:
     return [_nv("decisao", _motivo_ausencia(p)), juizo]
 
 
+# ---- resultado da decisão pelo critério do cliente ------------------------------
+# Critério (definido pelo Luís em 30/10/2026): para a parte-alvo no polo passivo e a seguradora,
+# DESFAVORÁVEL = condenação a pagar ou ressarcir; FAVORÁVEL = decisão sem condenação.
+# A regra só sugere. A revisão humana continua pendente.
+R_DISP_INICIO = re.compile(r"^(dispositivo|isto posto|ante o exposto|pelo exposto|diante do exposto)\b")
+R_FIM_DOC = re.compile(r"este documento foi gerado|assinado eletronicamente")
+R_DESFAV = re.compile(r"julgo (parcialmente )?procedente|julgo procedentes?\b|\bcondeno\b|\bcondenar\b|condenad[oa]s? (a|ao)\b")
+R_FAV = re.compile(
+    r"julgo improcedente|julgo extinto|extingo o processo|extinto o processo sem|homologo a desistencia|indefiro a (peticao )?inicial"
+)
+
+
+def _segmentos_dispositivo(p: Processo):
+    for d in p.documentos:
+        rot = norm(d.rotulo)
+        if not any(k in rot for k in ("sentenca", "acordao", "decisao")):
+            continue
+        linhas = d.texto.split("\n")
+        for i, l in enumerate(linhas):
+            if R_DISP_INICIO.match(norm(espaco(l))):
+                fim = len(linhas)
+                for j in range(i, len(linhas)):
+                    if R_FIM_DOC.search(norm(linhas[j])):
+                        fim = j
+                        break
+                yield d, linhas[i:fim]
+                break
+
+
+def classificar_resultado(p: Processo):
+    """Devolve (rotulo, trecho literal, localizacao, fonte) ou None. Só lê o dispositivo."""
+    for d, seg in _segmentos_dispositivo(p):
+        for linha in seg:
+            n = norm(linha)
+            if R_DESFAV.search(n):
+                return "DESFAVORÁVEL", espaco(linha), f"documento {d.rotulo}", f"documento: {d.rotulo}"
+        for linha in seg:
+            if R_FAV.search(norm(linha)):
+                return "FAVORÁVEL", espaco(linha), f"documento {d.rotulo}", f"documento: {d.rotulo}"
+    for mv in p.movimentos:  # texto de sentença no próprio movimento
+        if _evidencia_de_decisao(mv) or "sentenca" in norm(mv.tipo):
+            for linha in mv.texto.split("\n"):
+                n = norm(linha)
+                if R_DESFAV.search(n):
+                    return "DESFAVORÁVEL", espaco(linha), f"movimento {mv.indice} ({mv.tipo})", f"movimento: {mv.tipo}"
+                if R_FAV.search(n):
+                    return "FAVORÁVEL", espaco(linha), f"movimento {mv.indice} ({mv.tipo})", f"movimento: {mv.tipo}"
+    return None
+
+
+def decisao(p: Processo, parte_passiva: bool = False) -> list[Campo]:
+    """Existência de sentença ou acórdão e sugestão de resultado pelo critério do cliente."""
+    campos = _decisao_existencia(p)
+    juizo = next(c for c in campos if c.campo == "decisao_juizo")
+    if not parte_passiva:
+        juizo.valor = "revisão humana: a parte-alvo no polo passivo não foi confirmada"
+        return campos
+    r = classificar_resultado(p)
+    if r is None:
+        return campos
+    rotulo, trecho, loc, fonte = r
+    juizo.estado, juizo.motivo = SIM, ""
+    juizo.valor = (f"{rotulo} (sugestão por regra; revisão humana pendente). Critério: condenação a pagar ou "
+                   "ressarcir é desfavorável; sem condenação é favorável.")
+    juizo.evidencia, juizo.localizacao, juizo.fonte = trecho, loc, fonte
+    juizo.acesso_documento = "restrito_login_ou_senha" if fonte.startswith("documento") else "publico"
+    juizo.confianca, juizo.revisao = "regra", "pendente"
+    return campos
+
+
+
 def _data_certidao_transito(p: Processo):
     """Data do trânsito escrita numa certidão ('transitou em julgado em 16 de março de 2026')."""
     for d in p.documentos:
+        if "certidao" not in norm(d.rotulo):  # só documento que se declara certidão
+            continue
         for linha in d.texto.split("\n"):
-            m = R_CERT_TRANSITO.search(norm(linha))
-            if m and m.group(2) in _MESES_EXT:
-                return d, espaco(linha), f"{int(m.group(1)):02d}/{_MESES_EXT[m.group(2)]:02d}/{m.group(3)}"
+            n = norm(linha)
+            m = R_CERT_TRANSITO.search(n)
+            if not m or m.group(2) not in _MESES_EXT or re.search(r"\bnao\b|aguardando", n):
+                continue
+            try:
+                data = date(int(m.group(3)), _MESES_EXT[m.group(2)], int(m.group(1)))
+            except ValueError:
+                continue  # data inexistente
+            return d, espaco(linha), data.strftime("%d/%m/%Y")
     return None
 
 
@@ -451,10 +539,11 @@ def compara_fase(fase_base: str | None, fase_tribunal: Campo) -> str:
 
 
 def extrair(p: Processo, partes_alvo: list[str]) -> list[Campo]:
-    campos: list[Campo] = [partes(p, partes_alvo), parte_citada(p, partes_alvo), fase(p)]
+    pc = partes(p, partes_alvo)
+    campos: list[Campo] = [pc, parte_citada(p, partes_alvo), fase(p)]
     campos += pericia(p)
     campos += [acordo(p), desistencia(p)]
-    campos += decisao(p)
+    campos += decisao(p, parte_passiva=pc.estado == SIM)
     campos.append(transito(p))
     agora = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     for c in campos:

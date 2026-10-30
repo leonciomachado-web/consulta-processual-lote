@@ -47,6 +47,8 @@ class Personagem:
     polo: str  # ativo | passivo | advogado | outro
     nome: str
     linha: str  # texto literal de onde saiu
+    documento: str = ""  # rótulo do documento, quando a parte veio de um documento e não da lista de personagens
+    acesso: str = ""  # nível de acesso desse documento
 
 
 @dataclass

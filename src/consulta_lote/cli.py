@@ -80,8 +80,14 @@ def _carregar_documentos(d: Path, proc) -> int:
         for arq in sorted(pasta.glob("*.txt")):
             if arq.stem == "processo-completo":
                 continue
-            proc.documentos.append(parser.Documento(rotulo=arq.stem, texto=arq.read_text(encoding="utf-8"),
-                                                    acesso="restrito_login_ou_senha"))
+            texto = arq.read_text(encoding="utf-8")
+            i = texto.find("Sigilo:")  # cabeçalho do PJe: "Nível de Sigilo: 0 (Público)"
+            if i >= 0:
+                nivel = texto[i + 7:].strip()[:1]
+                if nivel.isdigit() and nivel != "0":
+                    print(f"  pulei {arq.name}: nível de sigilo {nivel} (não é público)")
+                    continue
+            proc.documentos.append(parser.Documento(rotulo=arq.stem, texto=texto, acesso="restrito_login_ou_senha"))
             n += 1
     return n
 
@@ -166,7 +172,7 @@ def cmd_planilha(a) -> int:
     d = dados_dir(a.dados)
     con = db.abrir(d)
     destino = Path(a.saida) if a.saida else d / "saida" / "planilha-equipe.xlsx"
-    print(planilha.gerar(con, destino))
+    print(planilha.gerar(con, destino, incluir_trechos_restritos=not a.sem_trechos_restritos))
     return 0
 
 
@@ -200,6 +206,8 @@ def main(argv: list[str] | None = None) -> int:
     s.set_defaults(f=cmd_importar)
     s = sub.add_parser("planilha")
     s.add_argument("--saida")
+    s.add_argument("--sem-trechos-restritos", action="store_true",
+                   help="omite o trecho literal de documentos obtidos com login (mostra só o estado)")
     s.set_defaults(f=cmd_planilha)
     sub.add_parser("verificar").set_defaults(f=cmd_verificar)
     s = sub.add_parser("blocos")

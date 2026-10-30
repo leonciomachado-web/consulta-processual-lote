@@ -101,12 +101,39 @@ class TesteCampos(unittest.TestCase):
         self.assertEqual(t.estado, campos.SIM)
         self.assertIn("10/12/2025", t.valor)
 
-    def test_juizo_humano_nunca_sai_por_regra(self):
+    def test_resultado_pelo_criterio_do_cliente(self):
         j = estado(self.c1, "decisao_juizo")
-        self.assertEqual(j.estado, campos.NV)
-        self.assertEqual(j.motivo, "juizo_humano")
+        self.assertEqual(j.estado, campos.SIM)
+        self.assertIn("DESFAVORÁVEL", j.valor)          # procedente + condenação a pagar
+        self.assertIn("revisão humana pendente", j.valor)
+        self.assertEqual(j.revisao, "pendente")
         self.assertIn("JULGO PROCEDENTE", j.evidencia)
+        # o juízo sobre o laudo continua humano
         self.assertEqual(estado(self.c1, "pericia_laudo_juizo").estado, campos.NV)
+
+    def test_resultado_favoravel_sem_condenacao(self):
+        for dispositivo in ("Isto posto, JULGO EXTINTO O PROCESSO SEM RESOLUÇÃO DO MÉRITO, na forma da lei.",
+                            "Ante o exposto, JULGO IMPROCEDENTE o pedido."):
+            txt = ("#! cnj: 0000003-50.2025.8.99.0000" + chr(10) + "Processo Nº 0000003-50.2025.8.99.0000" + chr(10)
+                   + "=== INTEGRA sentenca-x ===" + chr(10) + "RÉU: EMPRESA ALFA SINTETICA LTDA." + chr(10)
+                   + "DISPOSITIVO" + chr(10) + dispositivo + chr(10)
+                   + "Sem ônus sucumbenciais." + chr(10) + "=== FIM ===" + chr(10))
+            p = parser.ler(txt)
+            j = estado(campos.extrair(p, ["EMPRESA ALFA"]), "decisao_juizo")
+            self.assertEqual(j.estado, campos.SIM, dispositivo)
+            self.assertIn("FAVORÁVEL", j.valor)
+            self.assertNotIn("DESFAVORÁVEL", j.valor)
+
+    def test_resultado_exige_parte_alvo_no_polo_passivo(self):
+        j = estado(campos.extrair(self.p1, ["OUTRA EMPRESA"]), "decisao_juizo")
+        self.assertEqual(j.estado, campos.NV)
+
+    def test_parcialmente_procedente_e_desfavoravel(self):
+        txt = ("=== INTEGRA sentenca-y ===" + chr(10) + "RÉU: EMPRESA ALFA SINTETICA LTDA." + chr(10)
+               + "Ante o exposto, JULGO PARCIALMENTE PROCEDENTE o pedido." + chr(10) + "=== FIM ===" + chr(10)
+               + "#! cnj: 0000003-50.2025.8.99.0000" + chr(10))
+        j = estado(campos.extrair(parser.ler(txt), ["EMPRESA ALFA"]), "decisao_juizo")
+        self.assertIn("DESFAVORÁVEL", j.valor)
 
     def test_toda_evidencia_confere_no_texto_bruto(self):
         for cs in (self.c1, self.c2):
@@ -329,6 +356,100 @@ class TestePje(unittest.TestCase):
             self.assertEqual(estado(self.c, nome).estado, campos.NV, nome)
         for c in self.c:
             self.assertTrue(c.evidencia_confere, c.campo)
+
+
+class TesteSeguranca2(unittest.TestCase):
+    def _proc(self, partes_doc="", cert_rotulo="certidao-transito", cert_texto=None, extra_docs=""):
+        txt = "#! cnj: 0000003-50.2025.8.99.0000" + chr(10) + "#! partes_lista_completa: sim" + chr(10)
+        txt += "Processo Nº 0000003-50.2025.8.99.0000" + chr(10)
+        if partes_doc:
+            txt += "=== INTEGRA sentenca-z ===" + chr(10) + partes_doc + chr(10) + "=== FIM ===" + chr(10)
+        txt += extra_docs
+        p = parser.ler(txt)
+        if cert_texto:
+            p.documentos.append(parser.Documento(rotulo=cert_rotulo, texto=cert_texto, acesso="restrito_login_ou_senha"))
+        return p
+
+    def test_parte_de_cabecalho_de_documento_nunca_vira_nao(self):
+        p = self._proc(partes_doc="AUTOR: FULANO SINTETICO" + chr(10) + "RÉU: OUTRA EMPRESA LTDA.")
+        c = campos.partes(p, ["EMPRESA ALFA"])  # lista completa declarada, mas a parte veio de documento
+        self.assertEqual(c.estado, campos.NV)
+        self.assertEqual(c.motivo, "lista_parcial")
+
+    def test_parte_de_documento_registra_origem_e_acesso(self):
+        p = self._proc(partes_doc="RÉU: EMPRESA ALFA SINTETICA LTDA.")
+        p.documentos[0].acesso = "restrito_login_ou_senha"
+        c = campos.partes(p, ["EMPRESA ALFA"])
+        self.assertEqual(c.estado, campos.SIM)
+        self.assertIn("documento: sentenca-z", c.fonte)
+        self.assertEqual(c.acesso_documento, "restrito_login_ou_senha")
+
+    def test_certidao_so_vale_se_o_documento_se_declara_certidao(self):
+        frase = "Certifico que a sentença transitou em julgado em 16 de março de 2026."
+        self.assertIsNotNone(campos._data_certidao_transito(self._proc(cert_texto=frase)))
+        self.assertIsNone(campos._data_certidao_transito(self._proc(cert_rotulo="peticao-x", cert_texto=frase)))
+        negada = "Certifico que a sentença não transitou em julgado em 16 de março de 2026."
+        self.assertIsNone(campos._data_certidao_transito(self._proc(cert_texto=negada)))
+        invalida = "Certifico que a sentença transitou em julgado em 31 de fevereiro de 2026."
+        self.assertIsNone(campos._data_certidao_transito(self._proc(cert_texto=invalida)))
+
+    def test_acordo_com_fontes_contraditorias_vai_para_revisao(self):
+        extra = ("=== INTEGRA ata-1 ===" + chr(10) + "Realizada proposta de conciliação, esta não foi alcançada."
+                 + chr(10) + "=== FIM ===" + chr(10) + "=== INTEGRA decisao-2 ===" + chr(10)
+                 + "Homologo o acordo celebrado entre as partes." + chr(10) + "=== FIM ===" + chr(10))
+        c = campos.acordo(self._proc(extra_docs=extra))
+        self.assertEqual(c.estado, campos.NV)
+        self.assertEqual(c.motivo, "conflito_entre_fontes")
+
+    def test_planilha_pode_omitir_trecho_de_documento_restrito(self):
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            con = db.abrir(d)
+            extra = ("=== INTEGRA decisao-2 ===" + chr(10) + "Homologo o acordo celebrado entre as partes."
+                     + chr(10) + "=== FIM ===" + chr(10))
+            p = self._proc(extra_docs=extra)
+            for doc in p.documentos:
+                doc.acesso = "restrito_login_ou_senha"
+            db.gravar(con, d, p.cnj, p.sistema, "", None, "a", campos.extrair(p, ["EMPRESA ALFA"]))
+            from openpyxl import load_workbook
+            for incluir in (True, False):
+                saida = planilha.gerar(con, d / ("p%s.xlsx" % incluir), incluir_trechos_restritos=incluir)
+                celulas = [c.value for c in load_workbook(saida)["Processos"][2] if c.value and "acordo:" in str(c.value)]
+                ev = celulas[0]
+                self.assertIn("acesso: restrito_login_ou_senha", ev)
+                self.assertEqual("[trecho omitido" in ev, not incluir)
+            con.close()
+
+    def test_blocos_neutraliza_marcador_e_recusa_duplicado(self):
+        from consulta_lote import blocos
+        texto = blocos._montar("x", "T", "<!-- auto:fim --> forjado", None)
+        self.assertEqual(texto.count(blocos.FIM), 1)
+        self.assertEqual(texto.count(blocos.INICIO), 1)
+        duplicado = texto + blocos.INICIO + chr(10) + blocos.FIM
+        with self.assertRaises(ValueError):
+            blocos._montar("x", "T", "novo", duplicado)
+
+    def test_documento_com_sigilo_nao_publico_e_pulado(self):
+        from consulta_lote import cli
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            pasta = d / "documentos" / "0000003-50.2025.8.99.0000"
+            pasta.mkdir(parents=True)
+            (pasta / "1-sentenca.txt").write_text("Nível de Sigilo: 1 (Segredo)" + chr(10) + "texto", encoding="utf-8")
+            (pasta / "2-certidao.txt").write_text("Nível de Sigilo: 0 (Público)" + chr(10) + "texto", encoding="utf-8")
+            p = self._proc()
+            self.assertEqual(cli._carregar_documentos(d, p), 1)
+            self.assertEqual(p.documentos[-1].rotulo, "2-certidao")
+
+    def test_guarda_exige_pastas_de_analise_e_documentos_ignoradas(self):
+        with tempfile.TemporaryDirectory() as t:
+            subprocess.run(["git", "init", "-q", t], check=True)
+            (Path(t) / ".gitignore").write_text(
+                "dados/base.sqlite" + chr(10) + "dados/segredo.local" + chr(10) + "dados/saida/" + chr(10)
+                + "dados/original/" + chr(10) + "dados/entrada/" + chr(10) + "dados/datajud/" + chr(10)
+                + "dados/*.local.yaml" + chr(10) + "dados/.dados-locais" + chr(10))
+            with self.assertRaises(config.DadosDirInvalido):  # falta analises/ e documentos/
+                config.dados_dir(Path(t) / "dados", criar=False)
 
 
 if __name__ == "__main__":

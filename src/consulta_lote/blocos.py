@@ -176,8 +176,12 @@ def _manual(nome: str) -> str:
 
 
 def _montar(nome: str, titulo: str, auto: str, existente: str | None) -> str:
+    auto = auto.replace("<!--", "&lt;!--")  # texto do processo não pode forjar os marcadores
     bloco_auto = f"{INICIO}\n{auto}\n{FIM}"
-    if existente and INICIO in existente and FIM in existente:
+    if existente and (INICIO in existente or FIM in existente):
+        if existente.count(INICIO) != 1 or existente.count(FIM) != 1 or existente.index(INICIO) > existente.index(FIM):
+            raise ValueError(f"{nome}: marcadores auto:inicio e auto:fim duplicados ou fora de ordem; "
+                             "corrija o arquivo antes de regenerar")
         antes = existente.split(INICIO)[0]
         depois = existente.split(FIM, 1)[1]
         return antes + bloco_auto + depois
