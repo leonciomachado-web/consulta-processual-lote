@@ -1,0 +1,19 @@
+# Copie para a pasta de dados local como mapa_planilha.local.yaml.
+# Cada valor é uma expressão regular aplicada ao cabeçalho da coluna da sua planilha.
+aba: null            # null = primeira aba
+colunas:
+  cnj: "CNJ"
+  tribunal: "^Tribunal"
+  tipo_pasta: "^Tipo da pasta"
+  tipo_vara: "^Tipo Vara"
+  rito: "^Rito"
+  fase_base: "^Fase"
+regras:
+  jtr_alvo: "8.99"                       # justiça e tribunal esperados no número (ex.: "8.26")
+  rotulo_tribunal_esperado: "Ficticio"   # texto que a coluna do tribunal deve conter
+  excluir_tipo_pasta_contem: ["ADMINISTRATIVO"]
+  excluir_tipo_vara_contem: ["CRIMINAL"]
+piloto:
+  semente: 20251030
+  quotas: {inicial: 8, pagamento_final: 4, instrutoria: 4, julgamento: 4, extincao: 2}
+  incluir: []                            # números que entram sempre no piloto

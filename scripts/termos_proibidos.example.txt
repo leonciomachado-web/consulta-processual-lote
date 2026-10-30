@@ -1,0 +1,5 @@
+# Copie para a raiz do repositório como termos_proibidos.local.txt (o git ignora esse arquivo).
+# Um termo por linha, sem diferenciar maiúscula de minúscula.
+# Coloque aqui nomes de cliente, partes, escritório, advogados e qualquer palavra que não pode vazar.
+nome-de-cliente-exemplo
+nome-de-escritorio-exemplo

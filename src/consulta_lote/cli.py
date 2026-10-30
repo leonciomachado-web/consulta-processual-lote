@@ -1,0 +1,146 @@
+"""Linha de comando: python -m consulta_lote <comando>.
+
+Comandos:
+  init       cria a pasta de dados local (fora do repositório) e os modelos de configuração
+  limpar     lê a planilha de entrada, separa elegíveis e excluídos, sorteia o piloto
+  importar   lê arquivos .txt colados da tela, extrai os campos e grava no banco local
+  planilha   gera a planilha .xlsx para a equipe
+  verificar  confere o banco: SIM ou NAO sem evidência, evidência que não confere
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import shutil
+import sys
+from pathlib import Path
+
+import yaml
+
+from . import campos as campos_mod
+from . import db, lista, parser, planilha
+from .config import RAIZ_DO_PROGRAMA, DadosDirInvalido, dados_dir, proteger_escrita
+
+
+def _yaml(caminho: Path) -> dict:
+    return yaml.safe_load(caminho.read_text(encoding="utf-8")) or {}
+
+
+def cmd_init(a) -> int:
+    d = dados_dir(a.dados)
+    db.segredo_local(d)
+    for sub in ("entrada", "original", "saida"):
+        proteger_escrita(d / sub).mkdir(exist_ok=True)
+    for nome in ("partes_alvo", "mapa_planilha"):
+        dest = d / f"{nome}.local.yaml"
+        ex = RAIZ_DO_PROGRAMA / "examples" / f"{nome}.example.yaml"
+        if not dest.exists() and ex.exists():
+            shutil.copy(ex, dest)
+    print(f"Pasta de dados pronta: {d}")
+    print("Edite partes_alvo.local.yaml e mapa_planilha.local.yaml com os dados reais (ficam só aqui).")
+    return 0
+
+
+def cmd_limpar(a) -> int:
+    d = dados_dir(a.dados)
+    mapa_cfg = _yaml(d / "mapa_planilha.local.yaml")
+    origem = Path(a.planilha)
+    copia = proteger_escrita(d / "original" / origem.name)
+    if not copia.exists():
+        shutil.copy2(origem, copia)  # a original não é tocada; trabalha-se na cópia
+    linhas = lista.ler_planilha(copia, mapa_cfg["colunas"], mapa_cfg.get("aba"))
+    eleg, excl, alertas = lista.classificar(linhas, mapa_cfg.get("regras", {}))
+    saida = d / "saida"
+    lista.gravar_csv(saida / "elegiveis.csv", ["linha", "numero", "fase_base", "tipo_pasta", "rito"],
+                     [[l.n, l.cnj.formatado, l.atributos.get("fase_base", ""), l.atributos.get("tipo_pasta", ""),
+                       l.atributos.get("rito", "")] for l in eleg])
+    lista.gravar_csv(saida / "excluidos.csv", ["linha", "numero_bruto", "motivo"],
+                     [[l.n, l.cnj_bruto, m] for l, m in excl])
+    lista.gravar_csv(saida / "alertas.csv", ["linha", "numero", "alerta"],
+                     [[l.n, l.cnj.formatado, m] for l, m in alertas])
+    r = lista.resumo(eleg, excl, alertas)
+    piloto_cfg = mapa_cfg.get("piloto")
+    if piloto_cfg:
+        sel = lista.sortear_piloto(eleg, piloto_cfg["quotas"], piloto_cfg["semente"], piloto_cfg.get("incluir"))
+        lista.gravar_csv(saida / "piloto.csv", ["linha", "numero", "fase_base", "estrato"],
+                         [[l.n, l.cnj.formatado, l.atributos.get("fase_base", ""),
+                           lista.categoria_fase(l.atributos.get("fase_base", ""))] for l in sel])
+        r["piloto"] = len(sel)
+        r["semente"] = piloto_cfg["semente"]
+    print(json.dumps(r, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_importar(a) -> int:
+    d = dados_dir(a.dados)
+    alvo = _yaml(d / "partes_alvo.local.yaml").get("partes_alvo", [])
+    con = db.abrir(d)
+    n = 0
+    for arq in a.arquivos:
+        p = Path(arq)
+        proc = parser.ler(p.read_text(encoding="utf-8"))
+        if proc.cnj is None:
+            print(f"[{p.name}] sem número de processo reconhecível; pulei")
+            continue
+        cs = campos_mod.extrair(proc, alvo)
+        h = db.gravar(con, d, proc.cnj, proc.sistema, proc.meta.get("data_consulta", ""),
+                      proc.meta.get("fase_base"), p.name, cs)
+        n += 1
+        res = {c.campo: c.estado for c in cs}
+        print(f"[{p.name}] {proc.cnj.formatado} hash={h}")
+        for c in cs:
+            print(f"   {c.campo:32} {c.estado}" + (f" ({c.motivo})" if c.motivo else "") + (f" | {c.valor}" if c.valor else ""))
+    print(f"{n} processo(s) importado(s).")
+    return 0
+
+
+def cmd_planilha(a) -> int:
+    d = dados_dir(a.dados)
+    con = db.abrir(d)
+    destino = Path(a.saida) if a.saida else d / "saida" / "planilha-equipe.xlsx"
+    print(planilha.gerar(con, destino))
+    return 0
+
+
+def cmd_verificar(a) -> int:
+    d = dados_dir(a.dados)
+    con = db.abrir(d)
+    sem_ev = con.execute(
+        "SELECT count(*) FROM campo WHERE estado IN ('SIM','NAO') AND length(coalesce(evidencia_literal,''))=0"
+    ).fetchone()[0]
+    nao_confere = con.execute("SELECT count(*) FROM campo WHERE evidencia_confere=0").fetchone()[0]
+    por_estado = dict(con.execute("SELECT estado, count(*) FROM campo GROUP BY estado").fetchall())
+    por_motivo = dict(con.execute(
+        "SELECT motivo_nao_visivel, count(*) FROM campo WHERE estado!='SIM' AND estado!='NAO' GROUP BY 1").fetchall())
+    print(json.dumps({"SIM_ou_NAO_sem_evidencia": sem_ev, "evidencia_nao_confere": nao_confere,
+                      "campos_por_estado": por_estado, "nao_visivel_por_motivo": por_motivo},
+                     ensure_ascii=False, indent=2))
+    return 0 if sem_ev == 0 and nao_confere == 0 else 1
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(prog="consulta_lote", description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--dados", help="pasta de dados local (ou variável CONSULTA_LOTE_DADOS)")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("init").set_defaults(f=cmd_init)
+    s = sub.add_parser("limpar")
+    s.add_argument("planilha")
+    s.set_defaults(f=cmd_limpar)
+    s = sub.add_parser("importar")
+    s.add_argument("arquivos", nargs="+")
+    s.set_defaults(f=cmd_importar)
+    s = sub.add_parser("planilha")
+    s.add_argument("--saida")
+    s.set_defaults(f=cmd_planilha)
+    sub.add_parser("verificar").set_defaults(f=cmd_verificar)
+    a = ap.parse_args(argv)
+    try:
+        return a.f(a)
+    except DadosDirInvalido as e:
+        print(f"RECUSADO: {e}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

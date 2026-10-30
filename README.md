@@ -1,0 +1,90 @@
+# consulta-processual-lote
+
+Organiza o texto de processos judiciais que **uma pessoa copiou da tela**, extrai por regra
+sete informações com trecho literal de evidência e monta uma planilha de análise para revisão
+humana.
+
+> **O programa não acessa sites de tribunal.** A entrada é texto que a própria pessoa copia e
+> cola num arquivo `.txt`. Cada usuário responde pelo cumprimento dos termos de uso do tribunal
+> que consulta e pela proteção dos dados pessoais que manipula.
+>
+> **Este repositório é só o programa.** Dados de processos (textos colados, banco, planilhas,
+> logs) ficam **só na máquina local**, numa pasta fora do repositório. O programa recusa rodar
+> se a pasta de dados estiver dentro dele.
+
+## O que ele faz
+
+1. `limpar`: lê a sua planilha de carteira, separa processos elegíveis dos excluídos (com o
+   motivo de cada exclusão), valida o número (dígito verificador) e sorteia um piloto
+   estratificado com semente fixa.
+2. `importar`: lê os `.txt` colados da tela e preenche os campos abaixo, cada um com estado,
+   motivo, evidência literal e localização.
+3. `planilha`: gera um `.xlsx`, uma linha por processo, com colunas de revisão. Juízos que
+   exigem leitura humana saem em vermelho.
+4. `verificar`: confere o banco (nenhum SIM ou NAO sem evidência; toda evidência existe no
+   texto colado).
+
+### Campos
+
+| Campo | Observação |
+|---|---|
+| `parte_alvo_no_polo_passivo` | compara com a lista local de partes-alvo |
+| `fase` | por movimentos e marcos; reporta divergência com a fase da sua base, não corrige |
+| `pericia`, `pericia_laudo_juizo` | o juízo sobre o laudo nunca sai por regra |
+| `acordo`, `desistencia_ou_renuncia` | por texto de movimento ou decisão |
+| `decisao`, `decisao_juizo` | existência de sentença ou acórdão; "favorável" é sempre humano |
+| `transito_em_julgado` | com data quando o movimento a traz |
+
+### Estados (regra sem exceção)
+
+- `SIM`: texto positivo encontrado, com trecho literal.
+- `NAO`: só com texto positivo que afirme o negativo, ou lista completa lida.
+- `NAO_VISIVEL_NO_ACESSO_PUBLICO`: todo o resto, com o motivo (`lista_parcial`,
+  `documento_restrito`, `juizo_humano`, `sem_mencao_em_movimento`, `nao_consultado`...).
+  **Ausência no que foi colado nunca vira "não houve".** Sem trecho literal de evidência, o campo
+  fica não visível. O banco recusa SIM ou NAO sem evidência.
+
+## Instalação e uso
+
+```bash
+pip install -e .
+# 1. escolha uma pasta FORA deste repositório
+export CONSULTA_LOTE_DADOS="$HOME/meus-dados-de-processos"      # Windows: setx / $env:
+python -m consulta_lote init
+# 2. edite, na pasta de dados, partes_alvo.local.yaml e mapa_planilha.local.yaml
+python -m consulta_lote limpar caminho/da/sua-planilha.xlsx
+# 3. para cada processo: copie o texto da tela e cole num .txt em <pasta de dados>/entrada
+python -m consulta_lote importar <pasta de dados>/entrada/*.txt
+python -m consulta_lote planilha
+python -m consulta_lote verificar
+```
+
+Formato do texto colado: veja `examples/processo_sintetico_1.txt` (completo) e
+`examples/processo_sintetico_2.txt` (lista parcial). Linhas `#! chave: valor` no começo dizem
+o sistema, se a lista de partes e a de movimentos foram lidas por inteiro, e a fase da sua base.
+Se um documento abriu sem login, cole o texto entre `=== INTEGRA rótulo ===` e `=== FIM ===`.
+
+## Privacidade (o que o programa garante)
+
+- Pasta de dados fora do repositório; se estiver dentro de outro repositório git, precisa estar
+  ignorada por ele. Na dúvida, recusa.
+- Nenhum envio de texto a serviço externo. O programa não tem LLM nem rede.
+- Número do processo no banco é local; o identificador interno é HMAC com segredo local.
+- `.gitignore` de negação por padrão e ganchos de commit que bloqueiam termos proibidos e
+  números de processo (veja abaixo).
+
+## Para quem contribui
+
+```bash
+git init && python scripts/instalar_hooks.py
+cp scripts/termos_proibidos.example.txt termos_proibidos.local.txt   # edite; o git ignora
+python scripts/scan.py historico        # antes de publicar ou mudar a visibilidade
+python -m unittest discover -s tests -t .
+```
+
+Só exemplos sintéticos entram no repositório (números fictícios, nomes inventados). Os ganchos
+falham fechados: sem a lista local de termos, o commit é bloqueado.
+
+## Licença
+
+A definir pelo mantenedor antes de tornar o repositório público.

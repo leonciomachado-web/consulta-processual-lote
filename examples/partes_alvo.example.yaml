@@ -1,0 +1,4 @@
+# Copie para a pasta de dados local como partes_alvo.local.yaml e troque pelos nomes reais.
+# Este arquivo é só um exemplo, com nome inventado. O programa compara por trecho do nome.
+partes_alvo:
+  - "EMPRESA ALFA"

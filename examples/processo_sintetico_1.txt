@@ -1,0 +1,61 @@
+#! sistema: legado
+#! data_consulta: 2025-01-15
+#! fase_base: FASE INSTRUTORIA
+#! partes_lista_completa: sim
+#! movimentos_lista_completa: sim
+
+Processo Nº 0000001-80.2025.8.99.0000
+Dados da Serventia
+Comarca
+Comarca Ficticia
+Vara
+1ª Vara Cível
+Dados do Processo
+Competência
+Cível
+Assunto
+Indenização Por Dano Material
+Classe
+Procedimento Comum
+Localização na Serventia
+Arquivado
+Dados dos Personagens
+Autor	FULANO DE TAL SINTETICO
+Advogado	(XX000001) ADVOGADO SINTETICO UM
+Réu	EMPRESA ALFA SINTETICA LTDA
+Advogado	(XX000002) ADVOGADO SINTETICO DOIS
+Movimentação
+Tipo do Movimento: Baixa Definitiva
+Data:
+20/12/2025
+Tipo do Movimento: Trânsito em julgado
+Data:
+10/12/2025
+Tipo do Movimento: Sentença
+Data da publicação:
+01/11/2025
+Descrição
+JULGO PROCEDENTE o pedido formulado na inicial para condenar a ré ao pagamento de valor sintético.
+Tipo do Movimento: Decisão
+Data:
+15/09/2025
+Descrição
+Nomeio perito para realizar a prova pericial requerida pelas partes.
+Tipo do Movimento: Juntada - Petição
+Data da juntada:
+10/07/2025
+Descrição da Juntada:
+Petição de desistência do recurso interposto pela ré.
+Tipo do Movimento: Decisão
+Data:
+05/06/2025
+Descrição
+Homologo o acordo celebrado entre as partes quanto aos danos materiais.
+Tipo do Movimento: Citação
+Data:
+20/02/2025
+Descrição
+Carta de citação expedida.
+=== INTEGRA decisao 15/09/2025 ===
+Nomeio perito para realizar a prova pericial requerida pelas partes. Os honorários periciais serão fixados após a entrega do laudo.
+=== FIM ===

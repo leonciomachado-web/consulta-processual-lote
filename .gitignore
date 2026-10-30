@@ -1,0 +1,27 @@
+# Negação por padrão: tudo é ignorado, só o que está na lista abaixo entra.
+*
+!.gitignore
+!/README.md
+!/pyproject.toml
+!/LICENSE
+!/src/
+!/src/**
+!/tests/
+!/tests/**
+!/docs/
+!/docs/**
+!/examples/
+!/examples/**
+!/scripts/
+!/scripts/**
+!termos_proibidos.example.txt
+# mesmo dentro das pastas liberadas, nunca entram:
+__pycache__/
+*.pyc
+*.egg-info/
+*.sqlite
+*.xlsx
+*.csv
+*.pdf
+*.local.*
+termos_proibidos.local.txt
