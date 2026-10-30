@@ -555,12 +555,45 @@ class TesteSigiloAmplo(unittest.TestCase):
             "Nível de Sigilo" + chr(10) + ": 1": False,               # quebra antes dos dois-pontos
             "Nível de Sigilo" + chr(10) + "1 (Segredo)": False,        # rótulo sem dois-pontos nem valor legível
             "Nível  de   Sigilo   :  0": True,
+            "Nível de Sigilo" + chr(10) + "1 (Segredo)" + chr(10) + "Sigilo: 0": False,   # um valor não compensa o outro
             "Texto" + chr(10) + "Nível de Sigilo:" + chr(10) + chr(10) + "0": False,   # linha em branco no meio
         }
         for texto, publico in casos.items():
             niveis = cli._niveis_de_sigilo(texto)
             self.assertTrue(niveis, texto)
             self.assertEqual(all(cli._e_publico(v) for v in niveis), publico, repr(texto))
+
+
+class TesteEproc(unittest.TestCase):
+    def setUp(self):
+        self.p = parser.ler((EX / "processo_sintetico_eproc.txt").read_text(encoding="utf-8"))
+        self.c = campos.extrair(self.p, ["EMPRESA ALFA"])
+
+    def test_eventos_numerados(self):
+        self.assertEqual(len(self.p.movimentos), 8)
+        self.assertEqual(self.p.movimentos[0].data, "20/06/2025")
+        self.assertTrue(self.p.movimentos[0].tipo.startswith("Decorrido prazo"))
+        self.assertEqual(self.p.movimentos[-1].tipo, "Juntado(a) - Petição Inicial")
+
+    def test_polo_vem_dos_eventos(self):
+        polos = {(x.polo, x.nome) for x in self.p.personagens}
+        self.assertIn(("passivo", "EMPRESA ALFA SINTETICA LTDA"), polos)
+        self.assertIn(("ativo", "FULANO SINTETICO"), polos)
+        c = estado(self.c, "parte_alvo_no_polo_passivo")
+        self.assertEqual(c.estado, campos.SIM)
+        self.assertEqual(c.evidencia, "(RÉU - EMPRESA ALFA SINTETICA LTDA)")
+        self.assertTrue(c.localizacao.startswith("evento"))
+
+    def test_marcos_do_eproc(self):
+        self.assertEqual(estado(self.c, "fase").valor, "instrutória")
+        self.assertEqual(estado(self.c, "pericia").estado, campos.SIM)   # perito intimado
+        self.assertEqual(estado(self.c, "decisao").estado, campos.NV)    # ainda sem sentença
+        self.assertEqual(estado(self.c, "transito_em_julgado").estado, campos.NV)
+        self.assertEqual(campos.compara_fase("FASE INICIAL", estado(self.c, "fase")), "base_defasada")
+
+    def test_evidencias_conferem(self):
+        for c in self.c:
+            self.assertTrue(c.evidencia_confere, c.campo)
 
 
 if __name__ == "__main__":

@@ -108,6 +108,7 @@ def _carregar_documentos(d: Path, proc) -> int:
 
 _SIGILO_VALOR = re.compile("sigilo" + "\s*:[ " + chr(9) + "]*([^" + chr(10) + "]*)")
 _SIGILO_ROTULO = re.compile("nivel" + "\s+de\s+sigilo")
+_DOIS_PONTOS = re.compile("[ " + chr(9) + chr(10) + chr(13) + "]*:")
 # valor aceito como público: exatamente "0", "0 (publico)", "0 - publico" ou "publico"
 _VALOR_PUBLICO = re.compile("0([ ]*[-]?[ ]*[(]?publico[)]?)?|publico")
 
@@ -120,21 +121,21 @@ def _normaliza(texto: str) -> str:
 
 
 def _niveis_de_sigilo(texto: str) -> list[str]:
-    """Valor escrito depois de 'sigilo:' em cada ocorrência (qualquer espaço ou quebra antes dos dois-pontos).
-    Rótulo sem valor na mesma linha só aceita a linha seguinte se ela for, inteira, um valor público
-    estrito; senão entra como string vazia (não público). Rótulo 'nivel de sigilo' sem nenhum valor
-    legível também conta como não público."""
+    """Um valor por ocorrência de 'sigilo:' e um valor por rótulo 'nivel de sigilo'. Cada rótulo é
+    avaliado individualmente: precisa ter dois-pontos logo depois; senão entra como string vazia (não
+    público). Assim um 'sigilo: 0' em outro ponto nunca compensa um rótulo sem valor."""
     n = _normaliza(texto)
-    linhas_pos = [(m.start(), m.end(), m.group(1).strip()) for m in _SIGILO_VALOR.finditer(n)]
     valores: list[str] = []
-    for ini, fim, v in linhas_pos:
-        if not v:
-            resto = n[fim:].lstrip(chr(10)).split(chr(10), 1)[0].strip() if n[fim:fim + 1] == chr(10) else ""
-            seguinte = n[fim + 1:].split(chr(10), 1)[0].strip() if n[fim:fim + 1] == chr(10) else ""
+    for m in _SIGILO_VALOR.finditer(n):
+        v = m.group(1).strip()
+        if not v and n[m.end():m.end() + 1] == chr(10):
+            seguinte = n[m.end() + 1:].split(chr(10), 1)[0].strip()
             v = seguinte if _VALOR_PUBLICO.fullmatch(seguinte) else ""
         valores.append(v)
-    faltam = len(_SIGILO_ROTULO.findall(n)) - len(valores)
-    valores.extend([""] * max(0, faltam))
+    for r in _SIGILO_ROTULO.finditer(n):
+        resto = n[r.end():]
+        if not _DOIS_PONTOS.match(resto):  # rótulo sem dois-pontos: não há valor legível
+            valores.append("")
     return valores
 
 

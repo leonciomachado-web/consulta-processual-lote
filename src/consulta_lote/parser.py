@@ -33,6 +33,10 @@ ROTULOS_CAPA = {
     "classe": "classe",
     "localizacao na serventia": "localizacao",
     "oficio de registro": "oficio",
+    "classe da acao:": "classe",
+    "orgao julgador:": "vara",
+    "data de autuacao:": "autuacao",
+    "situacao": "situacao",
 }
 
 _RE_META = re.compile(r"^#!\s*([\w\-]+)\s*:\s*(.*)$")
@@ -196,6 +200,67 @@ def _extrai_movimentos_pje(linhas: list[str]) -> list[Movimento]:
     return movs
 
 
+_RE_EVENTO_NUM = re.compile("^[0-9]{1,5}$")
+_RE_EVENTO_DATA = re.compile("^([0-9]{2}/[0-9]{2}/[0-9]{4}) [0-9]{2}:[0-9]{2}:[0-9]{2}[ ]*(.*)$")
+_RE_PARTE_EVENTO = re.compile("^[(](AUTOR|AUTORA|R[EÉ]U|R[EÉ]|REQUERENTE|REQUERIDO|REQUERIDA|INTERESSADO|TERCEIRO)[ ]+-[ ]+(.+)[)]$", re.I)
+
+
+def _extrai_eventos_eproc(linhas: list[str]) -> list[Movimento]:
+    """Eventos numerados: uma linha só com o número, a linha seguinte com data, hora e a primeira linha da
+    descrição; o resto até o próximo número é continuação (descrição, usuário). Ordem como na tela."""
+    movs: list[Movimento] = []
+    i = 0
+    while i < len(linhas) - 1:
+        s = linhas[i].strip()
+        m = _RE_EVENTO_DATA.match(linhas[i + 1].strip()) if _RE_EVENTO_NUM.match(s) else None
+        if not m:
+            i += 1
+            continue
+        bloco = [s, linhas[i + 1].strip()]
+        j = i + 2
+        while j < len(linhas):
+            prox = linhas[j].strip()
+            if _RE_EVENTO_NUM.match(prox) and j + 1 < len(linhas) and _RE_EVENTO_DATA.match(linhas[j + 1].strip()):
+                break
+            if prox.lower().startswith(("libras", "voz", "+ acessibilidade")):
+                break
+            if prox:
+                bloco.append(prox)
+            j += 1
+        movs.append(Movimento(indice=len(movs), tipo=espaco(m.group(2)) or "evento " + s, data=m.group(1),
+                              texto="\n".join(bloco)))
+        i = j
+    return movs
+
+
+def _personagens_de_eventos(movs: list[Movimento]) -> list[Personagem]:
+    """Intimações trazem o polo escrito: '(RÉU - NOME)'. É a única fonte explícita de polo no texto do eproc."""
+    out: list[Personagem] = []
+    vistos: set[tuple[str, str]] = set()
+    for mv in movs:
+        for linha in mv.texto.split("\n"):
+            m = _RE_PARTE_EVENTO.match(linha.strip())
+            if not m:
+                continue
+            papel, nome = norm(m.group(1)), espaco(m.group(2))
+            if (papel, nome) in vistos:
+                continue
+            vistos.add((papel, nome))
+            polo = "ativo" if papel in PAPEIS_ATIVO else "passivo" if papel in PAPEIS_PASSIVO else "outro"
+            out.append(Personagem(papel=papel, polo=polo, nome=nome, linha=espaco(linha),
+                                  documento=f"evento {mv.texto.split(chr(10))[0]}", acesso="publico"))
+    return out
+
+
+def _junta_personagens(da_lista: list[Personagem], dos_eventos: list[Personagem]) -> list[Personagem]:
+    """Lista da capa mais partes que os eventos identificam pelo polo, sem duplicar o mesmo nome."""
+    out = list(da_lista)
+    for ev in dos_eventos:
+        if not any(norm(ev.nome) in norm(x.nome) for x in out):
+            out.append(ev)
+    return out
+
+
 def ler(texto_bruto: str) -> Processo:
     linhas = texto_bruto.replace("\r\n", "\n").replace("\r", "\n").split("\n")
     meta: dict[str, str] = {}
@@ -243,13 +308,14 @@ def ler(texto_bruto: str) -> Processo:
     if md:
         dist = md.group(1)
 
+    eventos = _extrai_movimentos(corpo) or _extrai_movimentos_pje(corpo) or _extrai_eventos_eproc(corpo)
     return Processo(
         cnj=cnj,
         meta=meta,
         capa=capa,
         distribuicao=dist,
-        personagens=_extrai_personagens(corpo),
-        movimentos=_extrai_movimentos(corpo) or _extrai_movimentos_pje(corpo),
+        personagens=_junta_personagens(_extrai_personagens(corpo), _personagens_de_eventos(eventos)),
+        movimentos=eventos,
         documentos=docs,
         texto=texto,
     )

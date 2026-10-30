@@ -1,0 +1,78 @@
+#! sistema: eproc
+#! cnj: 0000002-65.2025.8.99.0000
+#! data_consulta: 2025-01-15
+#! fase_base: FASE INICIAL
+#! movimentos_lista_completa: sim
+
+Consulta Processual - Detalhes do Processo
+Nº do processo
+0000002-65.2025.8.99.0000
+Classe da ação:
+Procedimento Comum Cível
+Competência
+Cível
+Data de autuação:
+10/01/2024 09:00:00
+Situação
+MOVIMENTO
+Órgão Julgador:
+Juízo da 1ª Vara Cível Sintética
+Partes e Representantes
+
+AUTOR RÉU
+
+FULANO SINTETICO (000.000.000-00) - Pessoa Física
+
+ADVOGADO SINTETICO UM XX000001
+Tipo de Usuário: ADVOGADO
+
+EMPRESA ALFA SINTETICA LTDA (00.000.000/0001-00) - Pessoa Jurídica
+
+ADVOGADO SINTETICO DOIS XX000002
+Tipo de Usuário: ADVOGADO
+
+INTERESSADO
+PERITO SINTETICO (000.000.000-01) - Pessoa Física
+Eventos
+Evento Data/Hora Descrição Usuário Documentos
+
+12
+20/06/2025 10:00:00 Decorrido prazo - Refer. ao Evento: 10
+(INTERESSADO - PERITO SINTETICO)
+
+SISTEMA
+
+11
+10/06/2025 09:30:00 Ato ordinatório praticado
+SERVIDOR SINTETICO
+
+10
+01/06/2025 15:00:00 Expedida/certificada a intimação eletrônica - Perito
+Refer.
+(INTERESSADO - PERITO SINTETICO)
+Prazo: 15 dias Status:FECHADO (12 - Decorrido prazo)
+SERVIDOR SINTETICO
+
+9
+15/03/2025 18:00:00 Decisão de saneamento e de organização do processo
+SISTEMA
+
+8
+10/02/2025 12:00:00 Expedida/certificada a intimação eletrônica
+Refer. ao Evento 6
+(RÉU - EMPRESA ALFA SINTETICA LTDA)
+Prazo: 15 dias Status:ABERTO
+SERVIDOR SINTETICO
+
+7
+09/02/2025 08:00:00 Juntado(a) - Contestação
+SISTEMA
+
+6
+05/02/2025 08:00:00 Expedida/certificada a intimação eletrônica
+(AUTOR - FULANO SINTETICO)
+SISTEMA
+
+1
+10/01/2024 09:00:00 Juntado(a) - Petição Inicial
+SISTEMA

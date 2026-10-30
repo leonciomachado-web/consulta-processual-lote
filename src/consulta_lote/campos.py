@@ -202,11 +202,13 @@ def partes(p: Processo, partes_alvo: list[str]) -> Campo:
                 campo="parte_alvo_no_polo_passivo",
                 estado=SIM,
                 valor="parte-alvo no polo passivo",
-                fonte=f"documento: {per.documento}" if per.documento else "lista de personagens",
+                fonte=(f"{per.documento}" if per.documento.startswith("evento") else f"documento: {per.documento}")
+                if per.documento else "lista de personagens",
                 documento_origem=per.documento,
                 acesso_documento=per.acesso or "publico",
                 evidencia=per.linha,
-                localizacao=f"cabeçalho de {per.documento}" if per.documento else f"personagem ({per.papel})",
+                localizacao=(per.documento if per.documento.startswith("evento") else f"cabeçalho de {per.documento}")
+                if per.documento else f"personagem ({per.papel})",
             )
     if p.partes_lista_completa and not de_documento:
         # lista inteira lida e a parte-alvo não está no polo passivo
