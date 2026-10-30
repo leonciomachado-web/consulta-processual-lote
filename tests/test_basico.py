@@ -404,6 +404,30 @@ class TesteLegadoSentencaEmRecebimento(unittest.TestCase):
         self.assertEqual(estado(c, "decisao").estado, campos.NV)
 
 
+class TesteDesistencia(unittest.TestCase):
+    """'Ciência, com renúncia ao prazo' é ato de prazo, não desistência da ação nem renúncia ao direito."""
+
+    def _estado(self, descricao):
+        nl = chr(10)
+        txt = nl.join([
+            "#! sistema: eproc", "#! cnj: 0000002-65.2025.8.99.0000", "#! movimentos_lista_completa: sim", "",
+            "Eventos", "Evento Data/Hora Descrição Usuário Documentos", "",
+            "2", "20/06/2025 10:00:00 " + descricao, "1", "10/06/2025 09:00:00 Juntada - Petição inicial", ""])
+        return estado(campos.extrair(parser.ler(txt), []), "desistencia_ou_renuncia")
+
+    def test_renuncia_ao_prazo_nao_e_desistencia(self):
+        e = self._estado("CIÊNCIA, COM RENÚNCIA AO PRAZO - Refer. ao Evento: 1")
+        self.assertEqual(e.estado, campos.NV)
+
+    def test_extinto_por_desistencia_conta(self):
+        e = self._estado("Extinto o processo por desistência")
+        self.assertEqual(e.estado, campos.SIM)
+
+    def test_renuncia_ao_direito_conta(self):
+        e = self._estado("PETIÇÃO - renúncia ao direito sobre o qual se funda a ação")
+        self.assertEqual(e.estado, campos.SIM)
+
+
 class TesteSeguranca2(unittest.TestCase):
     def _proc(self, partes_doc="", cert_rotulo="certidao-transito", cert_texto=None, extra_docs=""):
         txt = "#! cnj: 0000003-50.2025.8.99.0000" + chr(10) + "#! partes_lista_completa: sim" + chr(10)

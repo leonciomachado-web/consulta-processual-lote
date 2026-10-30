@@ -64,7 +64,8 @@ R_PERICIA_NAO = re.compile(
 R_ACORDO = re.compile(
     r"homolog\w*\W+(?:\w+\W+){0,3}(acordo|transacao)|acordo homologado|termo de acordo|transacao homologada"
 )
-R_DESIST = re.compile(r"desistencia|renuncia ao direito|renuncio|renuncia a")
+# "Ciência, com renúncia ao prazo" é ato de prazo (eproc), não desistência da ação nem renúncia ao direito.
+R_DESIST = re.compile(r"desistencia|renuncia ao direito|renuncio|renuncia a(?!o? prazo)")
 R_SENTENCA_TIPO = re.compile(r"\bsentenca\b|\bacordao\b")
 R_DISPOSITIVO = re.compile(
     r"julgo (parcialmente )?(procedente|improcedente)|extingo o processo|dou provimento|nego provimento"
