@@ -14,6 +14,7 @@ import json
 import re
 import shutil
 import sys
+import unicodedata
 from pathlib import Path
 
 import yaml
@@ -105,11 +106,25 @@ def _carregar_documentos(d: Path, proc) -> int:
     return n
 
 
-_SIGILO = re.compile("n[ií]vel[ ]+de[ ]+sigilo[ ]*:[ ]*([^" + chr(10) + "]+)", re.IGNORECASE)
+_SIGILO = re.compile("sigilo" + "\s*:" + "\s*(\S[^\n]*)")
+_SIGILO_VAZIO = re.compile("sigilo" + "\s*:" + "\s*$")
+
+
+def _normaliza(texto: str) -> str:
+    """NFKC (espaço sem quebra vira espaço), sem acento, minúsculas."""
+    t = unicodedata.normalize("NFKC", texto)
+    t = "".join(c for c in unicodedata.normalize("NFKD", t) if not unicodedata.combining(c))
+    return t.lower()
 
 
 def _niveis_de_sigilo(texto: str) -> list[str]:
-    return [v.strip() for v in _SIGILO.findall(texto)]
+    """Todos os valores escritos depois de 'sigilo:' (qualquer formato). 'sigilo:' sem valor legível
+    entra como string vazia, que _e_publico trata como não público."""
+    n = _normaliza(texto)
+    valores = [v.strip() for v in _SIGILO.findall(n)]
+    if _SIGILO_VAZIO.search(n):
+        valores.append("")
+    return valores
 
 
 def _e_publico(valor: str) -> bool:

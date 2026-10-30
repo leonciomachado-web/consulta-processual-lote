@@ -530,5 +530,25 @@ class TesteSeguranca3(unittest.TestCase):
             con.close()
 
 
+class TesteSigiloAmplo(unittest.TestCase):
+    def test_formatos_variados_de_sigilo(self):
+        from consulta_lote import cli
+        nb = chr(160)
+        casos = {
+            "Nível de Sigilo: 0 (Público)": True,
+            "NIVEL DE SIGILO : 0": True,
+            "Nível" + nb + "de" + nb + "Sigilo" + nb + ":" + nb + "0": True,
+            "Sigilo:" + chr(10) + "0 (Público)": True,       # valor na linha seguinte
+            "Nível de Sigilo: 1 (Segredo)": False,
+            "Sigilo: ilegível": False,
+            "Nível de Sigilo:": False,                          # sem valor
+            "Nível de Sigilo:" + chr(10): False,
+        }
+        for texto, publico in casos.items():
+            niveis = cli._niveis_de_sigilo(texto)
+            self.assertTrue(niveis, texto)
+            self.assertEqual(all(cli._e_publico(v) for v in niveis), publico, repr(texto))
+
+
 if __name__ == "__main__":
     unittest.main()
