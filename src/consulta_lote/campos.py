@@ -13,6 +13,7 @@ revisão humana.
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 
@@ -562,8 +563,9 @@ def compara_fase(fase_base: str | None, fase_tribunal: Campo) -> str:
 
 
 # separadores aceitos entre os grupos: espaço, ponto, barra, hífen, espaço sem quebra e travessões unicode
-SEPARADORES = " ./" + chr(0xA0) + chr(0x2010) + chr(0x2011) + chr(0x2012) + chr(0x2013) + chr(0x2014) + chr(0x2015) + "-"
-_CPF = re.compile("(?<![0-9])[0-9]{3}[" + SEPARADORES + "]?[0-9]{3}[" + SEPARADORES + "]?[0-9]{3}[" + SEPARADORES + "]?[0-9]{2}(?![0-9])")
+SEPARADORES = " ./" + chr(9) + chr(10) + chr(13) + chr(0xA0) + chr(0x2010) + chr(0x2011) + chr(0x2012) + chr(0x2013) + chr(0x2014) + chr(0x2015) + "-"
+_SEP = "[" + SEPARADORES + "]{0,3}"  # até 3 separadores entre os grupos (ex.: " - ", " / ")
+_CPF = re.compile("(?<![0-9])[0-9]{3}" + _SEP + "[0-9]{3}" + _SEP + "[0-9]{3}" + _SEP + "[0-9]{2}(?![0-9])")
 _CNPJ = re.compile("[0-9]{2}[.][0-9]{3}[.][0-9]{3}/[0-9]{4}-[0-9]{2}")
 
 
@@ -572,6 +574,8 @@ def mascara_cpf(texto: str) -> str:
     permanecem (são protegidos antes da máscara e restaurados depois)."""
     if not texto:
         return texto or ""
+    # NFKC (algarismos e espaços especiais) e sem caracteres invisíveis de formato (largura zero etc.)
+    texto = "".join(c for c in unicodedata.normalize("NFKC", texto) if unicodedata.category(c) != "Cf")
     guardados: list[str] = []
 
     def guarda(m):

@@ -731,5 +731,14 @@ class TesteCpfCentral(unittest.TestCase):
             con.close()
 
 
+class TesteCpfExtra(unittest.TestCase):
+    def test_separadores_multiplos_largura_zero_e_algarismos_largos(self):
+        casos = ["123 - 456 - 789 - 09", "123" + chr(0x200B) + "456" + chr(0x200B) + "789" + chr(0x200B) + "09",
+                 "".join(chr(0xFF10 + int(c)) for c in "12345678909"), "123" + chr(10) + "456" + chr(10) + "789" + chr(10) + "09"]
+        for v in casos:
+            self.assertNotRegex(campos.mascara_cpf("parte " + v + " fim"), "789|" + chr(0xFF17) + chr(0xFF18) + chr(0xFF19), repr(v))
+        self.assertEqual(campos.mascara_cpf("CNPJ 00.000.000/0001-00 e " + FICT1), "CNPJ 00.000.000/0001-00 e " + FICT1)
+
+
 if __name__ == "__main__":
     unittest.main()
