@@ -235,5 +235,58 @@ class TesteVarredura(unittest.TestCase):
             del os.environ["CONSULTA_LOTE_TERMOS"]
 
 
+class TesteSeguranca(unittest.TestCase):
+    def test_neutraliza_formula(self):
+        from consulta_lote.seguro import neutraliza
+        for perigoso in ("=1+1", "+cmd", "-2", "@SOMA(A1)", chr(9) + "x", chr(13) + "x"):
+            self.assertTrue(neutraliza(perigoso).startswith("'"), perigoso)
+        self.assertEqual(neutraliza("texto"), "texto")
+        self.assertEqual(neutraliza(5), 5)
+
+    def test_planilha_nao_grava_formula(self):
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            con = db.abrir(d)
+            p = parser.ler((EX / "processo_sintetico_1.txt").read_text(encoding="utf-8"))
+            db.gravar(con, d, p.cnj, p.sistema, "", "=HYPERLINK(\"http://x\")", "a", campos.extrair(p, ["EMPRESA ALFA"]))
+            saida = planilha.gerar(con, d / "p.xlsx")
+            from openpyxl import load_workbook
+            v = load_workbook(saida)["Processos"].cell(row=2, column=3).value
+            self.assertTrue(v.startswith("'="))
+            con.close()
+
+    def test_csv_nao_grava_formula(self):
+        with tempfile.TemporaryDirectory() as t:
+            arq = lista.gravar_csv(Path(t) / "x.csv", ["a"], [["=1+1"], ["ok"]])
+            linhas = arq.read_text(encoding="utf-8-sig").splitlines()
+            self.assertEqual(linhas[1], "'=1+1")
+
+    def test_guarda_exige_todos_os_artefatos_ignorados(self):
+        with tempfile.TemporaryDirectory() as t:
+            subprocess.run(["git", "init", "-q", t], check=True)
+            (Path(t) / ".gitignore").write_text("dados/*.sqlite" + chr(10))  # só um dos artefatos
+            with self.assertRaises(config.DadosDirInvalido):
+                config.dados_dir(Path(t) / "dados", criar=False)
+
+    def test_scan_le_arquivo_com_acento_e_espaco_no_nome(self):
+        sys.path.insert(0, str(RAIZ / "scripts"))
+        import scan
+        with tempfile.TemporaryDirectory() as t:
+            subprocess.run(["git", "init", "-q", t], check=True)
+            nome = "ação com espaço.txt"
+            (Path(t) / nome).write_text("cliente Fulano", encoding="utf-8")
+            (Path(t) / "dados.csv").write_text("a,b", encoding="utf-8")
+            subprocess.run(["git", "-C", t, "add", "-A"], check=True)
+            antigo = scan.RAIZ
+            scan.RAIZ = Path(t)
+            try:
+                self.assertIn(nome, scan.arquivos_em_stage())
+                achados = scan.pre_commit(["fulano"])
+            finally:
+                scan.RAIZ = antigo
+            self.assertTrue(any("termo proibido" in a for a in achados))
+            self.assertTrue(any("tipo de arquivo" in a for a in achados))
+
+
 if __name__ == "__main__":
     unittest.main()

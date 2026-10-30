@@ -18,7 +18,7 @@ from pathlib import Path
 import yaml
 
 from . import campos as campos_mod
-from . import db, lista, parser, planilha
+from . import datajud, db, lista, parser, planilha
 from .config import RAIZ_DO_PROGRAMA, DadosDirInvalido, dados_dir, proteger_escrita
 
 
@@ -94,6 +94,41 @@ def cmd_importar(a) -> int:
     return 0
 
 
+def cmd_datajud(a) -> int:
+    from .cnj import tratar, hash_do_processo
+    d = dados_dir(a.dados)
+    cfg = _yaml(d / "datajud.local.yaml")
+    chave, alias = cfg["chave"], cfg["alias"]
+    if a.numeros:
+        nums = list(a.numeros)
+    else:
+        import csv
+        with open(d / "saida" / "piloto.csv", encoding="utf-8-sig") as f:
+            nums = [r["numero"] for r in csv.DictReader(f, delimiter=";")]
+    pasta = proteger_escrita(d / "datajud")
+    pasta.mkdir(exist_ok=True)
+    con = db.abrir(d)
+    seg = db.segredo_local(d)
+    achou = 0
+    for n in nums:
+        c = tratar(n)
+        if c is None:
+            print(f"{n}: número inválido, pulei")
+            continue
+        h = hash_do_processo(c, seg)
+        try:
+            resp = datajud.consultar_e_guardar(c, chave, alias, pasta, h)
+        except Exception as e:  # rede, chave, limite: para e reporta, não insiste
+            print(f"PAROU em {c.formatado}: {type(e).__name__}: {e}", file=sys.stderr)
+            return 3
+        db.gravar_extra(con, d, c, datajud.campos_do_datajud(resp))
+        r = datajud.resumo(resp)
+        achou += 1 if r["encontrado"] else 0
+        print(f"{c.formatado} {h} encontrado={r['encontrado']} movimentos={r.get('movimentos')} sistema_datajud={r.get('sistema_no_datajud')}")
+    print(f"{achou}/{len(nums)} encontrados no DataJud.")
+    return 0
+
+
 def cmd_planilha(a) -> int:
     d = dados_dir(a.dados)
     con = db.abrir(d)
@@ -134,6 +169,9 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--saida")
     s.set_defaults(f=cmd_planilha)
     sub.add_parser("verificar").set_defaults(f=cmd_verificar)
+    s = sub.add_parser("datajud")
+    s.add_argument("numeros", nargs="*", help="números a consultar; sem argumento, usa o piloto.csv")
+    s.set_defaults(f=cmd_datajud)
     a = ap.parse_args(argv)
     try:
         return a.f(a)

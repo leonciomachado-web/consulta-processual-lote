@@ -12,6 +12,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 
 from .campos import NV, Campo, compara_fase
 from .config import proteger_escrita
+from .seguro import neutraliza
 
 CAMPOS_ORDEM = [
     ("parte_alvo_no_polo_passivo", "Parte-alvo no polo passivo", False),
@@ -73,7 +74,7 @@ def gerar(con: sqlite3.Connection, destino: Path) -> Path:
         if fase_c:
             cmp_ = compara_fase(fase_base, Campo(campo="fase", estado=fase_c[1], valor=fase_c[2] or ""))
         linha += [cmp_, "\n".join(evid), "", "", ""]
-        ws.append(linha)
+        ws.append([neutraliza(v) for v in linha])
         for i, (_c, _n, ia) in enumerate(CAMPOS_ORDEM):
             cel = ws.cell(row=ws.max_row, column=4 + i)
             cel.alignment = Alignment(wrap_text=True, vertical="top")

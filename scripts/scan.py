@@ -53,19 +53,33 @@ def varre(texto: str, onde: str, lista: list[str]) -> list[str]:
 
 
 def git(*args: str) -> str:
-    return subprocess.run(["git", "-C", str(RAIZ), *args], capture_output=True, text=True,
-                          encoding="utf-8", errors="replace", check=True).stdout
+    return subprocess.run(["git", "-C", str(RAIZ), "-c", "core.quotepath=off", *args], capture_output=True,
+                          text=True, encoding="utf-8", errors="replace", check=True).stdout
+
+
+def git_bytes(*args: str) -> bytes:
+    return subprocess.run(["git", "-C", str(RAIZ), "-c", "core.quotepath=off", *args], capture_output=True,
+                          check=True).stdout
+
+
+def arquivos_em_stage() -> list[str]:
+    """Nomes separados por NUL (sem aspas nem escape), sem arquivos apagados."""
+    bruto = git_bytes("diff", "--cached", "--name-only", "--diff-filter=d", "-z")
+    return [n.decode("utf-8", "replace") for n in bruto.split(chr(0).encode()) if n]
 
 
 def pre_commit(lista: list[str]) -> list[str]:
     achados: list[str] = []
-    for nome in git("diff", "--cached", "--name-only").splitlines():
-        if Path(nome).suffix.lower() in EXTENSOES_PROIBIDAS:
+    for nome in arquivos_em_stage():
+        sufixo = Path(nome.strip()).suffix.strip().lower()
+        if sufixo in EXTENSOES_PROIBIDAS:
             achados.append(f"{nome}: tipo de arquivo que pode conter dado de processo")
         achados += varre(nome, f"nome de arquivo {nome}", lista)
-    adicionadas = "\n".join(l[1:] for l in git("diff", "--cached", "-U0").splitlines()
-                            if l.startswith("+") and not l.startswith("+++"))
-    achados += varre(adicionadas, "conteúdo em stage", lista)
+        conteudo = git_bytes("show", f":{nome}")  # o que será de fato commitado
+        if chr(0).encode() in conteudo:
+            achados.append(f"{nome}: arquivo binário não é permitido")
+            continue
+        achados += varre(conteudo.decode("utf-8", "replace"), f"conteúdo de {nome}", lista)
     try:
         achados += varre(git("rev-parse", "--abbrev-ref", "HEAD"), "nome do ramo", lista)
     except subprocess.CalledProcessError:

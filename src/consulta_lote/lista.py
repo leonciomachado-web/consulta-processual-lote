@@ -16,6 +16,7 @@ from openpyxl import load_workbook
 
 from .cnj import Cnj, tratar
 from .config import proteger_escrita
+from .seguro import neutraliza
 from .textos import norm
 
 PAPEIS = ("cnj", "tribunal", "tipo_pasta", "tipo_vara", "fase_base", "rito")
@@ -122,7 +123,7 @@ def gravar_csv(destino: Path, cabecalho: list[str], linhas: list[list[str]]) -> 
     with open(destino, "w", newline="", encoding="utf-8-sig") as f:
         w = csv.writer(f, delimiter=";")
         w.writerow(cabecalho)
-        w.writerows(linhas)
+        w.writerows([[neutraliza(v) for v in l] for l in linhas])
     return destino
 
 

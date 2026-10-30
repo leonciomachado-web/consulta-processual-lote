@@ -41,13 +41,7 @@ def abrir(dados: Path) -> sqlite3.Connection:
     return con
 
 
-def gravar(con: sqlite3.Connection, dados: Path, cnj: Cnj, sistema: str, data_consulta: str,
-           fase_base: str | None, arquivo: str, campos: list[Campo]) -> str:
-    h = hash_do_processo(cnj, segredo_local(dados))
-    con.execute(
-        "INSERT OR REPLACE INTO processo(hash,cnj,sistema,data_consulta,fase_base,arquivo) VALUES (?,?,?,?,?,?)",
-        (h, cnj.formatado, sistema, data_consulta, fase_base, arquivo),
-    )
+def _upsert_campos(con: sqlite3.Connection, h: str, campos: list[Campo]) -> None:
     for c in campos:
         antigo = con.execute(
             "SELECT estado, valor, revisao_humana FROM campo WHERE hash=? AND campo=?", (h, c.campo)
@@ -63,4 +57,26 @@ def gravar(con: sqlite3.Connection, dados: Path, cnj: Cnj, sistema: str, data_co
              c.data_da_fonte, c.evidencia, c.localizacao, c.confianca, revisao, int(c.evidencia_confere)),
         )
     con.commit()
+
+
+def gravar(con: sqlite3.Connection, dados: Path, cnj: Cnj, sistema: str, data_consulta: str,
+           fase_base: str | None, arquivo: str, campos: list[Campo]) -> str:
+    h = hash_do_processo(cnj, segredo_local(dados))
+    con.execute(
+        "INSERT OR REPLACE INTO processo(hash,cnj,sistema,data_consulta,fase_base,arquivo) VALUES (?,?,?,?,?,?)",
+        (h, cnj.formatado, sistema, data_consulta, fase_base, arquivo),
+    )
+    _upsert_campos(con, h, campos)
+    return h
+
+
+def gravar_extra(con: sqlite3.Connection, dados: Path, cnj: Cnj, campos: list[Campo],
+                 fase_base: str | None = None) -> str:
+    """Campos de outra fonte (DataJud). Não sobrescreve o processo já importado."""
+    h = hash_do_processo(cnj, segredo_local(dados))
+    con.execute(
+        "INSERT OR IGNORE INTO processo(hash,cnj,sistema,fase_base) VALUES (?,?,?,?)",
+        (h, cnj.formatado, "nao_informado", fase_base),
+    )
+    _upsert_campos(con, h, campos)
     return h

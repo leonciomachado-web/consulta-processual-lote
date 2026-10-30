@@ -34,17 +34,26 @@ def _raiz_git(p: Path) -> Path | None:
     return None
 
 
+ARTEFATOS = (
+    ".dados-locais", "base.sqlite", "segredo.local", "saida/x.csv", "saida/x.xlsx", "original/x.xlsx",
+    "entrada/x.txt", "datajud/x.json", "partes_alvo.local.yaml", "datajud.local.yaml",
+)
+
+
 def _ignorado_pelo_git(raiz: Path, p: Path) -> bool:
-    sentinela = p / ".dados-locais"
-    try:
-        r = subprocess.run(
-            ["git", "-C", str(raiz), "check-ignore", "-q", str(sentinela)],
-            capture_output=True,
-            timeout=20,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return False  # sem git para conferir: recusa
-    return r.returncode == 0
+    """Todos os arquivos que o programa grava precisam estar ignorados, não só a pasta."""
+    for nome in ARTEFATOS:
+        try:
+            r = subprocess.run(
+                ["git", "-C", str(raiz), "check-ignore", "-q", str(p / nome)],
+                capture_output=True,
+                timeout=20,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return False  # sem git para conferir: recusa
+        if r.returncode != 0:
+            return False
+    return True
 
 
 def garantir_fora_do_repo(p: Path) -> None:
