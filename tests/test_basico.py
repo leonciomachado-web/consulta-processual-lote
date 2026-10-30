@@ -657,5 +657,27 @@ class TesteCpf(unittest.TestCase):
         self.assertTrue(campos.extrair(p, ["EMPRESA ALFA"])[0].evidencia_confere)
 
 
+class TesteCpfVariantes(unittest.TestCase):
+    def test_variantes_de_cpf_sao_mascaradas_e_numero_de_processo_nao(self):
+        for v in ("123.456.789-09", "12345678909", "123 456 789 09", "123.456.789/09", "123456789-09"):
+            self.assertNotIn("789", campos.mascara_cpf("parte FULANO " + v + " fim"), v)
+        proc = FICT1
+        self.assertEqual(campos.mascara_cpf("processo " + proc), "processo " + proc)
+        self.assertEqual(campos.mascara_cpf("CNPJ 00.000.000/0001-00"), "CNPJ 00.000.000/0001-00")
+
+    def test_todos_os_campos_de_texto_sao_mascarados(self):
+        txt = ("#! cnj: 0000003-50.2025.8.99.0000" + chr(10) + "=== INTEGRA decisao-123.456.789-09 ===" + chr(10)
+               + "Homologo o acordo de FULANO SINTETICO." + chr(10) + "=== FIM ===" + chr(10))
+        for c in campos.extrair(parser.ler(txt), ["X"]):
+            for atributo in ("evidencia", "valor", "fonte", "localizacao", "documento_origem"):
+                self.assertNotIn("123.456.789", getattr(c, atributo) or "", (c.campo, atributo))
+
+    def test_truncamento_nao_deixa_cpf_partido(self):
+        longa = "Homologo o acordo " + "palavra " * 20 + "de FULANO 123.456.789-09 fim"
+        txt = "#! cnj: 0000003-50.2025.8.99.0000" + chr(10) + "=== INTEGRA d ===" + chr(10) + longa + chr(10) + "=== FIM ==="
+        ev = campos._trecho(longa, campos.R_ACORDO, janela=45)
+        self.assertNotRegex(ev or "", "[0-9]{3}[.][0-9]{1,3}")
+
+
 if __name__ == "__main__":
     unittest.main()
