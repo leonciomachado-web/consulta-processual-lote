@@ -543,6 +543,11 @@ class TesteSigiloAmplo(unittest.TestCase):
             "Sigilo: ilegível": False,
             "Nível de Sigilo:": False,                          # sem valor
             "Nível de Sigilo:" + chr(10): False,
+            "Nível de Sigilo:" + chr(10) + "0 anexos juntados": False,   # rótulo vazio, próxima linha não é valor
+            "Nível de Sigilo: 01": False,
+            "Nível de Sigilo: 0 (Público) extra": False,                  # correspondência completa
+            "Nível de Sigilo: 0 - Público": True,
+            "Texto" + chr(10) + "Nível de Sigilo:" + chr(10) + chr(10) + "0": False,   # linha em branco no meio
         }
         for texto, publico in casos.items():
             niveis = cli._niveis_de_sigilo(texto)

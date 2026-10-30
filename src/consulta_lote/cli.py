@@ -106,8 +106,9 @@ def _carregar_documentos(d: Path, proc) -> int:
     return n
 
 
-_SIGILO = re.compile("sigilo" + "\s*:" + "\s*(\S[^\n]*)")
-_SIGILO_VAZIO = re.compile("sigilo" + "\s*:" + "\s*$")
+_SIGILO_LINHA = re.compile("sigilo[ " + chr(9) + "]*:[ " + chr(9) + "]*(.*)$")
+# valor aceito como público: exatamente "0", "0 (publico)", "0 - publico" ou "publico"
+_VALOR_PUBLICO = re.compile("0([ ]*[-]?[ ]*[(]?publico[)]?)?|publico")
 
 
 def _normaliza(texto: str) -> str:
@@ -118,20 +119,25 @@ def _normaliza(texto: str) -> str:
 
 
 def _niveis_de_sigilo(texto: str) -> list[str]:
-    """Todos os valores escritos depois de 'sigilo:' (qualquer formato). 'sigilo:' sem valor legível
-    entra como string vazia, que _e_publico trata como não público."""
-    n = _normaliza(texto)
-    valores = [v.strip() for v in _SIGILO.findall(n)]
-    if _SIGILO_VAZIO.search(n):
-        valores.append("")
+    """Valor escrito depois de 'sigilo:' em cada ocorrência. Rótulo sem valor na mesma linha só aceita
+    a linha seguinte se ela for, inteira, um valor público estrito; senão entra como string vazia
+    (que _e_publico trata como não público)."""
+    linhas = _normaliza(texto).split(chr(10))
+    valores: list[str] = []
+    for i, linha in enumerate(linhas):
+        m = _SIGILO_LINHA.search(linha)
+        if not m:
+            continue
+        v = m.group(1).strip()
+        if not v:
+            prox = linhas[i + 1].strip() if i + 1 < len(linhas) else ""
+            v = prox if _VALOR_PUBLICO.fullmatch(prox) else ""
+        valores.append(v)
     return valores
 
 
 def _e_publico(valor: str) -> bool:
-    v = valor.strip().lower()
-    if v.startswith("0"):
-        return not v[1:2].isdigit()  # "0" ou "0 (Público)"; "01" não
-    return v.startswith("público") or v.startswith("publico")
+    return _VALOR_PUBLICO.fullmatch(_normaliza(valor).strip()) is not None
 
 
 def cmd_importar(a) -> int:
