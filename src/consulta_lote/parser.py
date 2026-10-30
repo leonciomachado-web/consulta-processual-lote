@@ -157,6 +157,43 @@ def _extrai_movimentos(linhas: list[str]) -> list[Movimento]:
     return movs
 
 
+_MESES = {"jan": 1, "fev": 2, "mar": 3, "abr": 4, "mai": 5, "jun": 6,
+          "jul": 7, "ago": 8, "set": 9, "out": 10, "nov": 11, "dez": 12}
+_RE_DATA_PJE = re.compile(r"^(\d{1,2}) (jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez) (\d{4})$", re.I)
+_RE_HORA = re.compile(r"^\d{2}:\d{2}$")
+_RE_LINHA_DOC = re.compile(r"^\d{5,}\s*-\s*(.+)$")
+
+
+def _extrai_movimentos_pje(linhas: list[str]) -> list[Movimento]:
+    """Linha do tempo do processo eletrônico: cabeçalho de data (ex.: 30 mai 2026), depois
+    entradas que terminam numa linha de hora (HH:MM). Documentos aparecem como
+    'número - Tipo (título)'."""
+    movs: list[Movimento] = []
+    data: str | None = None
+    buf: list[str] = []
+    for bruta in linhas:
+        s = bruta.strip()
+        if not s:
+            continue
+        m = _RE_DATA_PJE.match(s)
+        if m:
+            data = f"{int(m.group(1)):02d}/{_MESES[m.group(2).lower()]:02d}/{m.group(3)}"
+            buf = []
+            continue
+        if _RE_HORA.match(s):
+            if buf and data:
+                titulos = [l for l in buf if not _RE_LINHA_DOC.match(l)]
+                if titulos:
+                    tipo = titulos[0]
+                else:
+                    tipo = _RE_LINHA_DOC.match(buf[0]).group(1)  # entrada só de documentos
+                movs.append(Movimento(indice=len(movs), tipo=espaco(tipo), data=data, texto="\n".join(buf)))
+            buf = []
+            continue
+        buf.append(s)
+    return movs
+
+
 def ler(texto_bruto: str) -> Processo:
     linhas = texto_bruto.replace("\r\n", "\n").replace("\r", "\n").split("\n")
     meta: dict[str, str] = {}
@@ -210,7 +247,7 @@ def ler(texto_bruto: str) -> Processo:
         capa=capa,
         distribuicao=dist,
         personagens=_extrai_personagens(corpo),
-        movimentos=_extrai_movimentos(corpo),
+        movimentos=_extrai_movimentos(corpo) or _extrai_movimentos_pje(corpo),
         documentos=docs,
         texto=texto,
     )

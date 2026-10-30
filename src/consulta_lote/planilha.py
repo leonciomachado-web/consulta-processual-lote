@@ -16,6 +16,7 @@ from .seguro import neutraliza
 
 CAMPOS_ORDEM = [
     ("parte_alvo_no_polo_passivo", "Parte-alvo no polo passivo", False),
+    ("parte_alvo_citada", "Parte-alvo citada no texto (polo não informado)", False),
     ("fase", "Fase no tribunal", True),
     ("pericia", "Perícia", False),
     ("pericia_laudo_juizo", "Laudo: favorável ou desfavorável (humano)", True),
@@ -89,7 +90,7 @@ def gerar(con: sqlite3.Connection, destino: Path) -> Path:
                 cel.font = VERMELHO
         ws.cell(row=ws.max_row, column=len(cab) - 4).alignment = Alignment(wrap_text=True, vertical='top')
         ws.cell(row=ws.max_row, column=len(cab) - 3).alignment = Alignment(wrap_text=True, vertical="top")
-    for col, larg in zip("ABCDEFGHIJKLMNOPQRST", [27, 12, 22] + [30] * 9 + [16, 80, 60, 16, 24, 24]):
+    for col, larg in zip("ABCDEFGHIJKLMNOPQRSTU", [27, 12, 22] + [30] * 10 + [16, 80, 60, 16, 24, 24]):
         ws.column_dimensions[col].width = larg
     ws.freeze_panes = "B2"
 

@@ -288,5 +288,44 @@ class TesteSeguranca(unittest.TestCase):
             self.assertTrue(any("tipo de arquivo" in a for a in achados))
 
 
+class TestePje(unittest.TestCase):
+    def setUp(self):
+        self.p = parser.ler((EX / "processo_sintetico_pje.txt").read_text(encoding="utf-8"))
+        self.c = campos.extrair(self.p, ["EMPRESA ALFA"])
+
+    def test_linha_do_tempo(self):
+        self.assertEqual(self.p.cnj.formatado, "0000003-50.2025.8.99.0000")
+        self.assertEqual(len(self.p.movimentos), 10)
+        self.assertEqual(self.p.movimentos[0].data, "30/05/2025")
+        self.assertEqual(self.p.movimentos[0].tipo, "ARQUIVADO DEFINITIVAMENTE")
+
+    def test_marcos(self):
+        t = estado(self.c, "transito_em_julgado")
+        self.assertEqual(t.estado, campos.SIM)
+        self.assertIn("27/03/2025", t.valor)
+        self.assertEqual(estado(self.c, "fase").valor, "baixado ou arquivado")
+        d = estado(self.c, "decisao")
+        self.assertEqual(d.estado, campos.SIM)
+        self.assertEqual(d.evidencia, "900000002 - Sentença")
+
+    def test_projeto_de_sentenca_nao_e_sentenca(self):
+        txt = "#! cnj: 0000003-50.2025.8.99.0000" + chr(10) + "28 jan 2025" + chr(10) + "JUNTADA DE PROJETO DE SENTENÇA" + chr(10) + "900000003 - Projeto de Sentença" + chr(10) + "15:08" + chr(10)
+        p = parser.ler(txt)
+        self.assertEqual(len(p.movimentos), 1)
+        self.assertEqual(estado(campos.extrair(p, []), "decisao").estado, campos.NV)
+
+    def test_parte_citada_sem_dizer_o_polo(self):
+        self.assertEqual(estado(self.c, "parte_alvo_citada").estado, campos.SIM)
+        polo = estado(self.c, "parte_alvo_no_polo_passivo")
+        self.assertEqual(polo.estado, campos.NV)
+        self.assertEqual(polo.motivo, "nao_consultado")
+
+    def test_ausentes_ficam_nao_visiveis_e_evidencia_confere(self):
+        for nome in ("pericia", "acordo", "desistencia_ou_renuncia"):
+            self.assertEqual(estado(self.c, nome).estado, campos.NV, nome)
+        for c in self.c:
+            self.assertTrue(c.evidencia_confere, c.campo)
+
+
 if __name__ == "__main__":
     unittest.main()

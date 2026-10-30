@@ -66,8 +66,10 @@ R_SENTENCA_TIPO = re.compile(r"\bsentenca\b|\bacordao\b")
 R_DISPOSITIVO = re.compile(
     r"julgo (parcialmente )?(procedente|improcedente)|extingo o processo|dou provimento|nego provimento"
 )
-R_TRANSITO = re.compile(r"transito em julgado")
-R_BAIXA = re.compile(r"baixa definitiva|arquivamento definitivo|arquivados? os autos")
+R_TRANSITO = re.compile(r"transit\w+ em julgado")
+R_BAIXA = re.compile(r"baixa definitiva|arquivamento definitivo|arquivado definitivamente|arquivados? os autos")
+R_DOC_DECISAO = re.compile(r"^\d{5,} - (sentenca|acordao)\b")
+R_TIPO_DECISAO = re.compile(r"^(sentenca|acordao)\b")
 R_SANEAMENTO = re.compile(r"saneamento|audiencia de instrucao|audiencia de conciliacao")
 R_POSTULATORIA = re.compile(r"citacao|contestacao|\bresposta\b|carta de citacao")
 
@@ -159,7 +161,7 @@ def partes(p: Processo, partes_alvo: list[str]) -> Campo:
     if not partes_alvo:
         return _nv("parte_alvo_no_polo_passivo", "nao_consultado", "nenhuma parte-alvo configurada")
     if not p.personagens:
-        return _nv("parte_alvo_no_polo_passivo", "nao_consultado")
+        return _nv("parte_alvo_no_polo_passivo", "nao_consultado", "lista de partes não colada; abra a aba de partes")
     alvos = [norm(a) for a in partes_alvo]
     for per in p.personagens:
         if per.polo == "passivo" and any(a in norm(per.nome) for a in alvos):
@@ -233,12 +235,38 @@ def desistencia(p: Processo) -> Campo:
     return _nv("desistencia_ou_renuncia", _motivo_ausencia(p))
 
 
+def _evidencia_de_decisao(mv: Movimento) -> str | None:
+    """Linha que prova sentença ou acórdão: o tipo do movimento ou um documento 'número - Sentença'.
+    'Projeto de Sentença' não conta: é minuta, não decisão."""
+    if R_TIPO_DECISAO.match(norm(mv.tipo)):
+        return espaco(mv.texto.split("\n")[0])
+    for linha in mv.texto.split("\n"):
+        if R_DOC_DECISAO.match(norm(linha)):
+            return espaco(linha)
+    return None
+
+
+def parte_citada(p: Processo, partes_alvo: list[str]) -> Campo:
+    """A parte-alvo aparece no texto (por exemplo, 'decorrido prazo de ...'), sem dizer o polo."""
+    alvos = [norm(a) for a in partes_alvo]
+    for mv in p.movimentos:
+        for linha in mv.texto.split("\n"):
+            if any(a in norm(linha) for a in alvos):
+                return _campo_de_mov("parte_alvo_citada", SIM, "parte-alvo citada; o polo não consta deste texto", mv, espaco(linha))
+    for per in p.personagens:
+        if any(a in norm(per.nome) for a in alvos):
+            return Campo(campo="parte_alvo_citada", estado=SIM, valor="parte-alvo na lista de personagens",
+                         fonte="lista de personagens", acesso_documento="publico", evidencia=per.linha,
+                         localizacao=f"personagem ({per.papel})")
+    return _nv("parte_alvo_citada", "sem_mencao_em_movimento" if p.movimentos_lista_completa else "lista_parcial")
+
+
 def decisao(p: Processo) -> list[Campo]:
     """Existência de sentença ou acórdão. O juízo "favorável" é sempre humano."""
     juizo = _nv("decisao_juizo", "juizo_humano", "revisão humana: favorável ou desfavorável à parte-alvo")
     for mv in p.movimentos:
-        if R_SENTENCA_TIPO.search(norm(mv.tipo)):
-            t = espaco(mv.texto.split("\n")[0])
+        t = _evidencia_de_decisao(mv)
+        if t:
             disp = _trecho(mv.texto, R_DISPOSITIVO)
             c = _campo_de_mov("decisao", SIM, "sentença ou acórdão registrado", mv, t)
             if disp:
@@ -280,14 +308,14 @@ def transito(p: Processo) -> Campo:
 
 
 def fase(p: Processo) -> Campo:
+    for mv in p.movimentos:  # baixa e arquivamento vêm depois do trânsito: checar primeiro
+        t = _trecho(mv.texto, R_BAIXA)
+        if t:
+            return _campo_de_mov("fase", SIM, "baixado ou arquivado", mv, t)
     for mv in p.movimentos:
         t = _trecho(mv.texto, R_TRANSITO)
         if t and "aguardando" not in norm(t):
             return _campo_de_mov("fase", SIM, "trânsito em julgado", mv, t)
-    for mv in p.movimentos:
-        t = _trecho(mv.texto, R_BAIXA)
-        if t:
-            return _campo_de_mov("fase", SIM, "baixado ou arquivado", mv, t)
     loc = p.capa.get("localizacao", "")
     if "aguardando" in norm(loc) and "transito" in norm(loc):
         return Campo(
@@ -301,8 +329,9 @@ def fase(p: Processo) -> Campo:
             confianca="regra",
         )
     for mv in p.movimentos:
-        if R_SENTENCA_TIPO.search(norm(mv.tipo)):
-            return _campo_de_mov("fase", SIM, "sentenciado", mv, espaco(mv.texto.split("\n")[0]))
+        t = _evidencia_de_decisao(mv)
+        if t:
+            return _campo_de_mov("fase", SIM, "sentenciado", mv, t)
     achado = _acha_em_movimentos(p, R_SANEAMENTO)
     if achado:
         mv, t = achado
@@ -350,7 +379,7 @@ def compara_fase(fase_base: str | None, fase_tribunal: Campo) -> str:
 
 
 def extrair(p: Processo, partes_alvo: list[str]) -> list[Campo]:
-    campos: list[Campo] = [partes(p, partes_alvo), fase(p)]
+    campos: list[Campo] = [partes(p, partes_alvo), parte_citada(p, partes_alvo), fase(p)]
     campos += pericia(p)
     campos += [acordo(p), desistencia(p)]
     campos += decisao(p)
