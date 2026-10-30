@@ -11,3 +11,6 @@ dependencies = ["openpyxl>=3.1", "pyyaml>=6"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+consulta_lote = ["templates/*.tpl"]

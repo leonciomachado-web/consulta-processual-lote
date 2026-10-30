@@ -20,7 +20,7 @@ from pathlib import Path
 import yaml
 
 from . import campos as campos_mod
-from . import blocos, datajud, db, levantamento, lista, parser, planilha
+from . import blocos, datajud, db, levantamento, lista, modelos, painel, parser, planilha, saida
 from .config import RAIZ_DO_PROGRAMA, DadosDirInvalido, dados_dir, proteger_escrita
 
 
@@ -53,9 +53,9 @@ def cmd_limpar(a) -> int:
     linhas = lista.ler_planilha(copia, mapa_cfg["colunas"], mapa_cfg.get("aba"))
     eleg, excl, alertas = lista.classificar(linhas, mapa_cfg.get("regras", {}))
     saida = d / "saida"
-    lista.gravar_csv(saida / "elegiveis.csv", ["linha", "numero", "fase_base", "tipo_pasta", "rito"],
-                     [[l.n, l.cnj.formatado, l.atributos.get("fase_base", ""), l.atributos.get("tipo_pasta", ""),
-                       l.atributos.get("rito", "")] for l in eleg])
+    chaves = sorted({k for l in eleg for k in l.atributos})  # todos os papéis do mapeamento, não só os fixos
+    lista.gravar_csv(saida / "elegiveis.csv", ["linha", "numero"] + chaves,
+                     [[l.n, l.cnj.formatado] + [l.atributos.get(k, "") for k in chaves] for l in eleg])
     lista.gravar_csv(saida / "excluidos.csv", ["linha", "numero_bruto", "motivo"],
                      [[l.n, l.cnj_bruto, m] for l, m in excl])
     lista.gravar_csv(saida / "alertas.csv", ["linha", "numero", "alerta"],
@@ -240,6 +240,22 @@ def cmd_levantamento(a) -> int:
     return 0
 
 
+def cmd_saida(a) -> int:
+    d = dados_dir(a.dados)
+    dados = painel.montar_dados(d)
+    print(saida.gerar(dados, d / "saida" / "saida-completa.xlsx"))
+    print(painel.gerar_html(dados, d / "saida" / "painel.html"))
+    print(f"{len(dados['processos'])} processos na planilha e no painel.")
+    return 0
+
+
+def cmd_modelo(a) -> int:
+    d = dados_dir(a.dados)
+    for arq in modelos.gravar(d / "modelos"):
+        print(arq)
+    return 0
+
+
 def cmd_blocos(a) -> int:
     from .cnj import tratar
     d = dados_dir(a.dados)
@@ -299,6 +315,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="omite o trecho literal de documentos obtidos com login (mostra só o estado)")
     s.set_defaults(f=cmd_planilha)
     sub.add_parser("verificar").set_defaults(f=cmd_verificar)
+    sub.add_parser("saida", help="planilha de saída completa e painel HTML").set_defaults(f=cmd_saida)
+    sub.add_parser("modelo", help="grava os modelos (dados inventados) em <dados>/modelos").set_defaults(f=cmd_modelo)
     s = sub.add_parser("blocos")
     s.add_argument("arquivo", help="texto colado do processo (.txt)")
     s.set_defaults(f=cmd_blocos)

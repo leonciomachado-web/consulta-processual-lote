@@ -176,7 +176,7 @@ def _manual(nome: str) -> str:
 
 
 def _montar(nome: str, titulo: str, auto: str, existente: str | None) -> str:
-    auto = mascara_cpf(auto.replace("<!--", "&lt;!--"))  # texto do processo não forja marcadores nem leva CPF
+    auto = mascara_cpf(auto).replace("<!--", "&lt;!--")  # máscara primeiro (ela normaliza); depois neutraliza marcador
     bloco_auto = f"{INICIO}\n{auto}\n{FIM}"
     if existente and (INICIO in existente or FIM in existente):
         if existente.count(INICIO) != 1 or existente.count(FIM) != 1 or existente.index(INICIO) > existente.index(FIM):

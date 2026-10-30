@@ -563,8 +563,8 @@ def compara_fase(fase_base: str | None, fase_tribunal: Campo) -> str:
 
 
 # separadores aceitos entre os grupos: espaço, ponto, barra, hífen, espaço sem quebra e travessões unicode
-SEPARADORES = " ./" + chr(9) + chr(10) + chr(13) + chr(0xA0) + chr(0x2010) + chr(0x2011) + chr(0x2012) + chr(0x2013) + chr(0x2014) + chr(0x2015) + "-"
-_SEP = "[" + SEPARADORES + "]{0,3}"  # até 3 separadores entre os grupos (ex.: " - ", " / ")
+SEPARADORES = " ./-"  # apenas para a limpeza do truncamento; a detecção de CPF usa qualquer não alfanumérico
+_SEP = "[^0-9A-Za-z]{0,6}"  # até 6 caracteres que não sejam letra nem algarismo entre os grupos
 _CPF = re.compile("(?<![0-9])[0-9]{3}" + _SEP + "[0-9]{3}" + _SEP + "[0-9]{3}" + _SEP + "[0-9]{2}(?![0-9])")
 _CNPJ = re.compile("[0-9]{2}[.][0-9]{3}[.][0-9]{3}/[0-9]{4}-[0-9]{2}")
 

@@ -740,5 +740,62 @@ class TesteCpfExtra(unittest.TestCase):
         self.assertEqual(campos.mascara_cpf("CNPJ 00.000.000/0001-00 e " + FICT1), "CNPJ 00.000.000/0001-00 e " + FICT1)
 
 
+class TesteSaidaEPainel(unittest.TestCase):
+    def test_modelo_gera_planilha_e_painel(self):
+        from consulta_lote import modelos
+        from openpyxl import load_workbook
+        with tempfile.TemporaryDirectory() as t:
+            xlsx, html = modelos.gravar(Path(t))
+            wb = load_workbook(xlsx)
+            self.assertEqual(wb.sheetnames, ["Resumo", "Processos", "Evidências", "Pendências de revisão", "Perguntas e legenda"])
+            self.assertEqual(wb["Processos"].max_row, 9)  # 8 processos + cabeçalho
+            resumo = wb["Resumo"]
+            self.assertTrue(str(resumo["B3"].value).startswith("=COUNTA("))
+            texto = html.read_text(encoding="utf-8")
+            self.assertIn("MODELO COM DADOS INVENTADOS", texto)
+            self.assertNotIn("/*__DADOS__*/", texto)
+            self.assertIn("0000001-", texto)
+
+    def test_html_nao_deixa_texto_do_processo_fechar_o_script(self):
+        from consulta_lote import painel
+        d = {"gerado_em": "x", "processos": [{"numero": "n", "obs": "</script><script>alert(1)</script>"}],
+             "filtros": [], "graficos": [], "perguntas": []}
+        html = painel.renderizar_html(d)
+        dentro = html.split('id="dados" type="application/json">')[1].split("</script>")[0]
+        self.assertNotIn("<script>", dentro)
+        self.assertEqual(html.count("</script>"), 2)  # o dos dados e o do programa
+
+    def test_cpf_mascarado_na_planilha_e_no_painel(self):
+        from consulta_lote import modelos, painel, saida
+        from openpyxl import load_workbook
+        d = modelos.dados_modelo()
+        d["processos"][0]["campos"]["acordo"]["evidencia"] = "FULANO SINTETICO (123.456.789-09) acordou"
+        d["processos"][0]["proximo_passo"] = "ligar para 123 456 789 09"
+        with tempfile.TemporaryDirectory() as t:
+            self.assertNotIn("123.456.789", painel.renderizar_html(d))
+            ws = load_workbook(saida.gerar(d, Path(t) / "s.xlsx"))
+            for folha in ws.worksheets:
+                for linha in folha.iter_rows(values_only=True):
+                    for cel in linha:
+                        self.assertNotIn("789-09", str(cel))
+                        self.assertNotIn("789 09", str(cel))
+
+    def test_montar_dados_une_base_datajud_e_analise(self):
+        from consulta_lote import painel
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            (d / "saida").mkdir()
+            (d / "saida" / "elegiveis.csv").write_text(
+                "linha;numero;comarca;fase_base;valor_causa;tipo_pasta" + chr(10)
+                + "2;" + FICT1 + ";COMARCA ALFA;FASE INICIAL;45000;AÇÃO JUDICIAL" + chr(10), encoding="utf-8-sig")
+            dados = painel.montar_dados(d)
+            r = dados["processos"][0]
+            self.assertEqual(r["analise"], "não consultado")
+            self.assertEqual(r["faixa_valor"], "20 a 50 mil")
+            self.assertEqual(r["fase_base_cat"], "inicial")
+            self.assertEqual(r["ano"], "2025")
+            self.assertTrue(len(dados["filtros"]) >= 20)
+
+
 if __name__ == "__main__":
     unittest.main()
