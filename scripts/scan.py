@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parents[1]
-CNJ = re.compile(r"\d{7}\D{0,2}\d{2}\D{0,2}\d{4}\D{0,2}\d\D{0,2}\d{2}\D{0,2}\d{4}")
+CNJ = re.compile(r"\d{7}[^\d\r\n]{0,2}\d{2}[^\d\r\n]{0,2}\d{4}[^\d\r\n]{0,2}\d[^\d\r\n]{0,2}\d{2}[^\d\r\n]{0,2}\d{4}")
 EXTENSOES_PROIBIDAS = {".xlsx", ".xls", ".csv", ".pdf", ".docx", ".sqlite", ".db", ".html", ".log"}
 
 
@@ -88,7 +88,7 @@ def pre_commit(lista: list[str]) -> list[str]:
 
 
 def historico(lista: list[str]) -> list[str]:
-    log = git("log", "--all", "-p", "--format=%H%n%an%n%ae%n%s%n%b")
+    log = git("log", "--all", "-p", "--format=%an%n%ae%n%s%n%b")
     return varre(log, "histórico", lista)
 
 
