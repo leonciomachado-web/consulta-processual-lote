@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -53,7 +54,15 @@ def consultar_e_guardar(cnj: Cnj, chave: str, alias: str, pasta: Path, h: str) -
     arq = proteger_escrita(pasta / f"{h}.json")
     if arq.exists():  # cache: não repete consulta
         return json.loads(arq.read_text(encoding="utf-8"))
-    dados = consultar(cnj, chave, alias)
+    dados = None
+    for espera in (30, 90, 180, None):  # limite do servidor (429): espera e tenta de novo, depois para
+        try:
+            dados = consultar(cnj, chave, alias)
+            break
+        except urllib.error.HTTPError as e:
+            if e.code != 429 or espera is None:
+                raise
+            time.sleep(espera)
     arq.write_text(json.dumps(dados, ensure_ascii=False), encoding="utf-8")
     time.sleep(INTERVALO_S)
     return dados

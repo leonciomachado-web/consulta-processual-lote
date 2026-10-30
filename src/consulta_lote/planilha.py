@@ -42,7 +42,7 @@ def gerar(con: sqlite3.Connection, destino: Path) -> Path:
     ws.title = "Processos"
     cab = ["Processo", "Sistema", "Fase na base do cliente"] + [n for _, n, _ in CAMPOS_ORDEM] + [
         "Fase: base x tribunal", "Evidências (campo: trecho literal, onde)",
-        "Conferido por", "Correção", "Observação",
+        "DataJud: movimentos registrados (segundo olhar)", "Conferido por", "Correção", "Observação",
     ]
     ws.append(cab)
     for cel in ws[1]:
@@ -73,15 +73,23 @@ def gerar(con: sqlite3.Connection, destino: Path) -> Path:
         cmp_ = "indeterminado"
         if fase_c:
             cmp_ = compara_fase(fase_base, Campo(campo="fase", estado=fase_c[1], valor=fase_c[2] or ""))
-        linha += [cmp_, "\n".join(evid), "", "", ""]
+        dj = [
+            f"{c.replace('_datajud', '')}: {e}"
+            for c, e in con.execute(
+                "SELECT campo, evidencia_literal FROM campo WHERE hash=? AND fonte='DataJud' AND estado='SIM' ORDER BY campo",
+                (h,),
+            )
+        ]
+        linha += [cmp_, "\n".join(evid), "\n".join(dj), "", "", ""]
         ws.append([neutraliza(v) for v in linha])
         for i, (_c, _n, ia) in enumerate(CAMPOS_ORDEM):
             cel = ws.cell(row=ws.max_row, column=4 + i)
             cel.alignment = Alignment(wrap_text=True, vertical="top")
             if ia:
                 cel.font = VERMELHO
+        ws.cell(row=ws.max_row, column=len(cab) - 4).alignment = Alignment(wrap_text=True, vertical='top')
         ws.cell(row=ws.max_row, column=len(cab) - 3).alignment = Alignment(wrap_text=True, vertical="top")
-    for col, larg in zip("ABCDEFGHIJKLMNOPQRS", [27, 12, 22] + [30] * 9 + [16, 80, 16, 24, 24]):
+    for col, larg in zip("ABCDEFGHIJKLMNOPQRST", [27, 12, 22] + [30] * 9 + [16, 80, 60, 16, 24, 24]):
         ws.column_dimensions[col].width = larg
     ws.freeze_panes = "B2"
 
