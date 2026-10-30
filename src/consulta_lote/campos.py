@@ -16,7 +16,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from .parser import Movimento, Processo
+from .parser import Movimento, Personagem, Processo
 from .textos import espaco, norm
 
 SIM = "SIM"
@@ -57,6 +57,7 @@ class Campo:
 R_PERICIA = re.compile(r"\bperit[oa]s?\b|laudo pericial|honorarios periciais|prova pericial|\bpericia\b")
 R_PERICIA_NAO = re.compile(
     r"(indefiro|dispenso|dispensad\w+|desnecessari\w+)\W+(?:\w+\W+){0,4}(prova pericial|pericia)"
+    r"|descaber pericia|nao cabe pericia|incabivel\w* (a )?pericia"
 )
 R_ACORDO = re.compile(
     r"homolog\w*\W+(?:\w+\W+){0,3}(acordo|transacao)|acordo homologado|termo de acordo|transacao homologada"
@@ -68,6 +69,11 @@ R_DISPOSITIVO = re.compile(
 )
 R_TRANSITO = re.compile(r"transit\w+ em julgado")
 R_BAIXA = re.compile(r"baixa definitiva|arquivamento definitivo|arquivado definitivamente|arquivados? os autos")
+R_ACORDO_NAO = re.compile(r"conciliacao,? esta nao foi alcancada|nao houve acordo|nao (foi|restou) alcancad\w+ (o )?acordo|sem acordo")
+R_CERT_TRANSITO = re.compile(r"transit\w+ em julgado em (\d{1,2}) de ([a-z]+) de (\d{4})")
+R_PERICIA_FORTE = re.compile(r"nomeio .{0,25}perit|laudo pericial|honorarios periciais|laudo do perito")
+_MESES_EXT = {"janeiro": 1, "fevereiro": 2, "marco": 3, "abril": 4, "maio": 5, "junho": 6, "julho": 7,
+              "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12}
 R_DOC_DECISAO = re.compile(r"^\d{5,} - (sentenca|acordao)\b")
 R_TIPO_DECISAO = re.compile(r"^(sentenca|acordao)\b")
 R_SANEAMENTO = re.compile(r"saneamento|audiencia de instrucao|audiencia de conciliacao")
@@ -157,13 +163,38 @@ def _motivo_ausencia(p: Processo) -> str:
 
 
 # ---- extratores ----------------------------------------------------------------
+R_PARTE_DOC = re.compile(r"^(autor|autora|requerente|reu|re|requerido|requerida):\s*(.+)$")
+R_PARTE_DOC_SUF = re.compile(r"^(.+?)\s*\((autor|autora|reu|re|requerente|requerido)\)\s*$")
+
+
+def _personagens_de_documentos(p: Processo) -> list[Personagem]:
+    """Cabeçalho de sentença ou ata: 'RÉU: NOME' ou 'NOME (RÉU)'. Só lê o que está escrito."""
+    out: list[Personagem] = []
+    for d in p.documentos:
+        for linha in d.texto.split("\n"):
+            s = espaco(linha)
+            m = R_PARTE_DOC.match(norm(s))
+            if m:
+                nome = s.split(":", 1)[1].strip()
+                papel = m.group(1)
+            else:
+                m2 = R_PARTE_DOC_SUF.match(s) if s == s.upper() else None
+                if not m2:
+                    continue
+                nome, papel = m2.group(1).strip(), norm(m2.group(2))
+            polo = "ativo" if papel in ("autor", "autora", "requerente") else "passivo"
+            out.append(Personagem(papel=papel, polo=polo, nome=nome, linha=s))
+    return out
+
+
 def partes(p: Processo, partes_alvo: list[str]) -> Campo:
     if not partes_alvo:
         return _nv("parte_alvo_no_polo_passivo", "nao_consultado", "nenhuma parte-alvo configurada")
-    if not p.personagens:
+    personagens = p.personagens or _personagens_de_documentos(p)
+    if not personagens:
         return _nv("parte_alvo_no_polo_passivo", "nao_consultado", "lista de partes não colada; abra a aba de partes")
     alvos = [norm(a) for a in partes_alvo]
-    for per in p.personagens:
+    for per in personagens:
         if per.polo == "passivo" and any(a in norm(per.nome) for a in alvos):
             return Campo(
                 campo="parte_alvo_no_polo_passivo",
@@ -176,8 +207,8 @@ def partes(p: Processo, partes_alvo: list[str]) -> Campo:
             )
     if p.partes_lista_completa:
         # lista inteira lida e a parte-alvo não está no polo passivo
-        no_ativo = any(per.polo == "ativo" and any(a in norm(per.nome) for a in alvos) for per in p.personagens)
-        ev = p.personagens[0].linha
+        no_ativo = any(per.polo == "ativo" and any(a in norm(per.nome) for a in alvos) for per in personagens)
+        ev = personagens[0].linha
         return Campo(
             campo="parte_alvo_no_polo_passivo",
             estado=NAO,
@@ -192,8 +223,18 @@ def partes(p: Processo, partes_alvo: list[str]) -> Campo:
 
 
 def pericia(p: Processo) -> list[Campo]:
-    achado = _acha_em_movimentos(p, R_PERICIA) or _acha_em_documentos(p, R_PERICIA)
     laudo_juizo = _nv("pericia_laudo_juizo", "documento_restrito", "ler o laudo; juízo é humano")
+    forte = _acha_em_movimentos(p, R_PERICIA_FORTE) or _acha_em_documentos(p, R_PERICIA_FORTE)
+    neg = _acha_em_movimentos(p, R_PERICIA_NAO) or _acha_em_documentos(p, R_PERICIA_NAO)
+    if neg and not forte:  # "descabe perícia" também contém a palavra perícia: negativo primeiro
+        origem, trecho = neg
+        c = (
+            _campo_de_mov("pericia", NAO, "perícia dispensada, indeferida ou incabível", origem, trecho)
+            if isinstance(origem, Movimento)
+            else _campo_de_doc("pericia", NAO, "perícia dispensada, indeferida ou incabível", origem, trecho)
+        )
+        return [c, laudo_juizo]
+    achado = _acha_em_movimentos(p, R_PERICIA) or _acha_em_documentos(p, R_PERICIA)
     if achado:
         origem, trecho = achado
         c = (
@@ -216,6 +257,12 @@ def pericia(p: Processo) -> list[Campo]:
 
 
 def acordo(p: Processo) -> Campo:
+    neg = _acha_em_movimentos(p, R_ACORDO_NAO) or _acha_em_documentos(p, R_ACORDO_NAO)
+    if neg:  # texto positivo que afirma o negativo (ex.: ata: conciliação não alcançada)
+        origem, trecho = neg
+        if isinstance(origem, Movimento):
+            return _campo_de_mov("acordo", NAO, "acordo não alcançado", origem, trecho)
+        return _campo_de_doc("acordo", NAO, "acordo não alcançado", origem, trecho)
     achado = _acha_em_movimentos(p, R_ACORDO) or _acha_em_documentos(p, R_ACORDO)
     if achado:
         origem, trecho = achado
@@ -286,7 +333,25 @@ def decisao(p: Processo) -> list[Campo]:
     return [_nv("decisao", _motivo_ausencia(p)), juizo]
 
 
+def _data_certidao_transito(p: Processo):
+    """Data do trânsito escrita numa certidão ('transitou em julgado em 16 de março de 2026')."""
+    for d in p.documentos:
+        for linha in d.texto.split("\n"):
+            m = R_CERT_TRANSITO.search(norm(linha))
+            if m and m.group(2) in _MESES_EXT:
+                return d, espaco(linha), f"{int(m.group(1)):02d}/{_MESES_EXT[m.group(2)]:02d}/{m.group(3)}"
+    return None
+
+
 def transito(p: Processo) -> Campo:
+    cert = _data_certidao_transito(p)
+    if cert:  # o documento vence o movimento: o cartório lança o movimento depois do fato
+        d, linha, data = cert
+        c = _campo_de_doc("transito_em_julgado", SIM, f"trânsito em julgado em {data} (certidão)", d, linha)
+        mv = _acha_em_movimentos(p, R_TRANSITO)
+        if mv and mv[0].data and mv[0].data != data and "aguardando" not in norm(mv[1]):
+            c.valor += f"; o histórico registra o movimento em {mv[0].data}"
+        return c
     achado = _acha_em_movimentos(p, R_TRANSITO)
     if achado:
         mv, trecho = achado
@@ -344,38 +409,45 @@ def fase(p: Processo) -> Campo:
 
 
 # ---- comparação com a fase que o cliente registrou na base ----------------------
-_CAT_TRIBUNAL = {
+# Etapas em ordem. A base do cliente costuma ficar numa etapa anterior à do tribunal: isso é
+# defasagem, não divergência de fato. "Arquivado" vem DEPOIS de "extinção sem julgamento de mérito".
+ETAPAS = {"inicial": 1, "instrutoria": 2, "sentenca": 3, "transito": 4, "encerrado": 5}
+_ETAPA_TRIBUNAL = {
     "postulatória": "inicial",
     "instrutória": "instrutoria",
-    "sentenciado": "julgamento",
-    "aguardando trânsito em julgado": "julgamento",
-    "trânsito em julgado": "encerrado",
+    "sentenciado": "sentenca",
+    "aguardando trânsito em julgado": "sentenca",
+    "trânsito em julgado": "transito",
     "baixado ou arquivado": "encerrado",
 }
 
 
-def _cat_base(fase_base: str) -> str | None:
+def _etapa_base(fase_base: str) -> str | None:
     t = norm(fase_base)
     if "inicial" in t:
         return "inicial"
     if "instrut" in t:
         return "instrutoria"
-    if "julgamento" in t:
-        return "julgamento"
-    if any(k in t for k in ("pagamento", "extin", "encerr", "transitado")):
+    if any(k in t for k in ("pagamento", "encerr", "arquiv", "baixa")):
         return "encerrado"
+    if "transitado" in t:
+        return "transito"
+    if "extin" in t or "julgamento" in t:  # extinção sem julgamento de mérito é sentença
+        return "sentenca"
     return None
 
 
 def compara_fase(fase_base: str | None, fase_tribunal: Campo) -> str:
-    """Reporta, não corrige. Devolve: coincide, diverge ou indeterminado."""
+    """Reporta, não corrige. Devolve: coincide, base_defasada, base_adiantada ou indeterminado."""
     if not fase_base or fase_tribunal.estado != SIM:
         return "indeterminado"
-    cb = _cat_base(fase_base)
-    ct = _CAT_TRIBUNAL.get(fase_tribunal.valor)
-    if cb is None or ct is None:
+    eb = _etapa_base(fase_base)
+    et = _ETAPA_TRIBUNAL.get(fase_tribunal.valor)
+    if eb is None or et is None:
         return "indeterminado"
-    return "coincide" if cb == ct else "diverge"
+    if ETAPAS[eb] == ETAPAS[et]:
+        return "coincide"
+    return "base_defasada" if ETAPAS[eb] < ETAPAS[et] else "base_adiantada"
 
 
 def extrair(p: Processo, partes_alvo: list[str]) -> list[Campo]:

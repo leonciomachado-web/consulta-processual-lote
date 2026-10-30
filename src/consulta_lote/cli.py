@@ -18,7 +18,7 @@ from pathlib import Path
 import yaml
 
 from . import campos as campos_mod
-from . import datajud, db, lista, parser, planilha
+from . import blocos, datajud, db, lista, parser, planilha
 from .config import RAIZ_DO_PROGRAMA, DadosDirInvalido, dados_dir, proteger_escrita
 
 
@@ -71,6 +71,21 @@ def cmd_limpar(a) -> int:
     return 0
 
 
+def _carregar_documentos(d: Path, proc) -> int:
+    """Lê dados/documentos/<numero>/*.txt (um por documento do processo, já convertido).
+    O arquivo do processo inteiro não entra: a análise usa os documentos separados."""
+    pasta = d / "documentos" / proc.cnj.formatado
+    n = 0
+    if pasta.is_dir():
+        for arq in sorted(pasta.glob("*.txt")):
+            if arq.stem == "processo-completo":
+                continue
+            proc.documentos.append(parser.Documento(rotulo=arq.stem, texto=arq.read_text(encoding="utf-8"),
+                                                    acesso="restrito_login_ou_senha"))
+            n += 1
+    return n
+
+
 def cmd_importar(a) -> int:
     d = dados_dir(a.dados)
     alvo = _yaml(d / "partes_alvo.local.yaml").get("partes_alvo", [])
@@ -82,12 +97,13 @@ def cmd_importar(a) -> int:
         if proc.cnj is None:
             print(f"[{p.name}] sem número de processo reconhecível; pulei")
             continue
+        ndocs = _carregar_documentos(d, proc)
         cs = campos_mod.extrair(proc, alvo)
         h = db.gravar(con, d, proc.cnj, proc.sistema, proc.meta.get("data_consulta", ""),
                       proc.meta.get("fase_base"), p.name, cs)
         n += 1
         res = {c.campo: c.estado for c in cs}
-        print(f"[{p.name}] {proc.cnj.formatado} hash={h}")
+        print(f"[{p.name}] {proc.cnj.formatado} hash={h} documentos={ndocs}")
         for c in cs:
             print(f"   {c.campo:32} {c.estado}" + (f" ({c.motivo})" if c.motivo else "") + (f" | {c.valor}" if c.valor else ""))
     print(f"{n} processo(s) importado(s).")
@@ -126,6 +142,23 @@ def cmd_datajud(a) -> int:
         achou += 1 if r["encontrado"] else 0
         print(f"{c.formatado} {h} encontrado={r['encontrado']} movimentos={r.get('movimentos')} sistema_datajud={r.get('sistema_no_datajud')}")
     print(f"{achou}/{len(nums)} encontrados no DataJud.")
+    return 0
+
+
+def cmd_blocos(a) -> int:
+    from .cnj import tratar
+    d = dados_dir(a.dados)
+    alvo = _yaml(d / "partes_alvo.local.yaml").get("partes_alvo", [])
+    arq = Path(a.arquivo)
+    proc = parser.ler(arq.read_text(encoding="utf-8"))
+    if proc.cnj is None:
+        print("sem número de processo reconhecível")
+        return 1
+    _carregar_documentos(d, proc)
+    cs = campos_mod.extrair(proc, alvo)
+    pasta = d / "analises" / proc.cnj.formatado / "blocos"
+    for f in blocos.gerar(proc, cs, pasta):
+        print(f)
     return 0
 
 
@@ -169,6 +202,9 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--saida")
     s.set_defaults(f=cmd_planilha)
     sub.add_parser("verificar").set_defaults(f=cmd_verificar)
+    s = sub.add_parser("blocos")
+    s.add_argument("arquivo", help="texto colado do processo (.txt)")
+    s.set_defaults(f=cmd_blocos)
     s = sub.add_parser("datajud")
     s.add_argument("numeros", nargs="*", help="números a consultar; sem argumento, usa o piloto.csv")
     s.set_defaults(f=cmd_datajud)

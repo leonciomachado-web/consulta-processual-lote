@@ -101,7 +101,7 @@ def gerar(con: sqlite3.Connection, destino: Path) -> Path:
         ["NAO", "só com texto positivo que afirme o negativo, ou lista completa lida"],
         ["NÃO VISÍVEL NO ACESSO PÚBLICO", "o que foi colado não permite afirmar. Ausência nunca vira “não houve”"],
         ["Vermelho", "inferência ou juízo que exige revisão humana (favorável ou desfavorável)"],
-        ["Fase: base x tribunal", "coincide, diverge ou indeterminado. Divergência é reportada, não corrigida"],
+        ["Fase: base x tribunal", "coincide, base_defasada (tribunal em etapa posterior), base_adiantada ou indeterminado. Reportado, não corrigido"],
     ]:
         leg.append(linha)
     leg.column_dimensions["A"].width = 34

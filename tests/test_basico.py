@@ -141,11 +141,15 @@ class TesteCampos(unittest.TestCase):
         self.assertEqual(campos.fase(p).valor, "aguardando trânsito em julgado")
 
     def test_comparacao_com_a_base_reporta_sem_corrigir(self):
-        f = estado(self.c1, "fase")
-        self.assertEqual(campos.compara_fase("FASE INICIAL", f), "diverge")
+        f = estado(self.c1, "fase")  # tribunal: baixado ou arquivado
+        self.assertEqual(campos.compara_fase("FASE INICIAL", f), "base_defasada")
         self.assertEqual(campos.compara_fase("PAGAMENTO FINAL", f), "coincide")
         self.assertEqual(campos.compara_fase(None, f), "indeterminado")
-
+        # arquivado é etapa posterior à extinção sem julgamento de mérito: a base está defasada
+        self.assertEqual(campos.compara_fase("EXTINÇÃO SEM JULGAMENTO DE MÉRITO", f), "base_defasada")
+        sent = campos.Campo(campo="fase", estado=campos.SIM, valor="sentenciado")
+        self.assertEqual(campos.compara_fase("EXTINÇÃO SEM JULGAMENTO DE MÉRITO", sent), "coincide")
+        self.assertEqual(campos.compara_fase("PAGAMENTO FINAL", sent), "base_adiantada")
 
 class TesteBancoEPlanilha(unittest.TestCase):
     def test_ciclo_completo(self):
