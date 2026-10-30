@@ -99,7 +99,9 @@ def _trecho(texto_bruto: str, padrao: re.Pattern[str], janela: int = 90) -> str 
             inteiro = espaco(linha)
             corte = inteiro[: janela * 2]
             if len(inteiro) > len(corte):  # não deixa um número partido na ponta (poderia ser um CPF cortado)
-                corte = _CAUDA_NUMERICA.sub("", corte).rstrip()
+                while corte and _CAUDA_NUMERICA.search(_norm_texto(corte)):  # decide na forma normalizada, corta o original
+                corte = corte[:-1]
+            corte = corte.rstrip()
             return corte
     return None
 
@@ -565,6 +567,11 @@ def compara_fase(fase_base: str | None, fase_tribunal: Campo) -> str:
 # separadores aceitos entre os grupos: espaço, ponto, barra, hífen, espaço sem quebra e travessões unicode
 SEPARADORES = " ./-"  # apenas para a limpeza do truncamento; a detecção de CPF usa qualquer não alfanumérico
 _SEP = "[^0-9A-Za-z]{0,6}"  # até 6 caracteres que não sejam letra nem algarismo entre os grupos
+def _norm_texto(texto: str) -> str:
+    """NFKC (algarismos largos, espaços especiais) e sem caracteres invisíveis de formato (largura zero)."""
+    return "".join(c for c in unicodedata.normalize("NFKC", texto) if unicodedata.category(c) != "Cf")
+
+
 _CAUDA_NUMERICA = re.compile("[0-9](?:[^0-9A-Za-z]{0,6}[0-9])*[^0-9A-Za-z]*$")  # mesma regra da detecção
 _CPF = re.compile("(?<![0-9])[0-9]{3}" + _SEP + "[0-9]{3}" + _SEP + "[0-9]{3}" + _SEP + "[0-9]{2}(?![0-9])")
 _CNPJ = re.compile("[0-9]{2}[.][0-9]{3}[.][0-9]{3}/[0-9]{4}-[0-9]{2}")
@@ -576,7 +583,7 @@ def mascara_cpf(texto: str) -> str:
     if not texto:
         return texto or ""
     # NFKC (algarismos e espaços especiais) e sem caracteres invisíveis de formato (largura zero etc.)
-    texto = "".join(c for c in unicodedata.normalize("NFKC", texto) if unicodedata.category(c) != "Cf")
+    texto = _norm_texto(texto)
     guardados: list[str] = []
 
     def guarda(m):

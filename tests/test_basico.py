@@ -808,5 +808,19 @@ class TesteTruncamentoCpf(unittest.TestCase):
                 self.assertNotRegex(ev or "", "[0-9]{3}[^0-9A-Za-z]{0,6}[0-9]", (corpo, corte))
 
 
+class TesteTruncamentoNormalizado(unittest.TestCase):
+    def test_algarismos_largos_e_largura_zero_cortados_no_meio(self):
+        larg = "".join(chr(0xFF10 + int(c)) for c in "12345678909")
+        zw = chr(0x200B)
+        corpos = [larg, zw.join("12345678909"), "123" + zw * 8 + "456" + zw * 8 + "789" + zw * 8 + "09"]
+        for corpo in corpos:
+            longa = "Homologo o acordo " + "palavra " * 5 + "de FULANO " + corpo + " fim"
+            ate = longa.index(corpo)
+            for corte in range(ate + 2, ate + len(corpo)):
+                ev = campos._trecho(longa, campos.R_ACORDO, janela=corte // 2 + 1)
+                n = campos._norm_texto(ev or "")
+                self.assertNotRegex(n, "[0-9]{3}[^0-9A-Za-z]{0,6}[0-9]", (repr(corpo[:6]), corte))
+
+
 if __name__ == "__main__":
     unittest.main()
