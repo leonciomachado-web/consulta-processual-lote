@@ -363,6 +363,47 @@ class TestePje(unittest.TestCase):
             self.assertTrue(c.evidencia_confere, c.campo)
 
 
+class TesteLegadoSentencaEmRecebimento(unittest.TestCase):
+    """No legado a sentença vem num movimento 'Recebimento', com o dispositivo (cortado) e o link
+    'Ver íntegra Do(A) Sentença'. Decisão de embargos aparece como 'Decisão' e não é sentença."""
+
+    def setUp(self):
+        self.texto = (EX / "processo_sintetico_legado_recebimento.txt").read_text(encoding="utf-8")
+        self.p = parser.ler(self.texto)
+        self.c = campos.extrair(self.p, ["EMPRESA ALFA"])
+
+    def test_sentenca_em_movimento_recebimento(self):
+        d = estado(self.c, "decisao")
+        self.assertEqual(d.estado, campos.SIM)
+        self.assertTrue(d.evidencia.startswith("Ver íntegra Do(A) Sentença"))
+        self.assertEqual(d.data_da_fonte, "01/08/2025")
+        self.assertTrue(d.evidencia_confere)
+
+    def test_resultado_sugerido_vem_do_dispositivo_do_movimento(self):
+        j = estado(self.c, "decisao_juizo")
+        self.assertEqual(j.estado, campos.SIM)
+        self.assertTrue(j.valor.startswith("DESFAVORÁVEL"))
+        self.assertIn("JULGO PARCIALMENTE PROCEDENTE", j.evidencia)
+
+    def test_fase_fica_sentenciado(self):
+        self.assertEqual(estado(self.c, "fase").valor, "sentenciado")
+
+    def test_decisao_de_embargos_nao_e_sentenca(self):
+        so_embargos = self.texto.split("Tipo do Movimento: Juntada")[0] + "Libras" + chr(10)
+        c = campos.extrair(parser.ler(so_embargos), ["EMPRESA ALFA"])
+        self.assertEqual(estado(c, "decisao").estado, campos.NV)
+
+    def test_acordao_em_recebimento_conta(self):
+        txt = self.texto.replace("Ver íntegra Do(A) Sentença (Original)", "Ver íntegra Do(A) Acórdão (Original)")
+        txt = txt.replace("Ver íntegra do(a) Sentença (Simplificado)", "Ver íntegra do(a) Acórdão (Simplificado)")
+        self.assertEqual(estado(campos.extrair(parser.ler(txt), ["EMPRESA ALFA"]), "decisao").estado, campos.SIM)
+
+    def test_projeto_de_sentenca_em_recebimento_nao_conta(self):
+        txt = self.texto.replace("Isto posto, JULGO", "Projeto de sentença: JULGO")
+        c = campos.extrair(parser.ler(txt), ["EMPRESA ALFA"])
+        self.assertEqual(estado(c, "decisao").estado, campos.NV)
+
+
 class TesteSeguranca2(unittest.TestCase):
     def _proc(self, partes_doc="", cert_rotulo="certidao-transito", cert_texto=None, extra_docs=""):
         txt = "#! cnj: 0000003-50.2025.8.99.0000" + chr(10) + "#! partes_lista_completa: sim" + chr(10)

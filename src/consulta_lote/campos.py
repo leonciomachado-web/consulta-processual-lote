@@ -77,6 +77,7 @@ R_PERICIA_FORTE = re.compile(r"nomeio .{0,25}perit|laudo pericial|honorarios per
 _MESES_EXT = {"janeiro": 1, "fevereiro": 2, "marco": 3, "abril": 4, "maio": 5, "junho": 6, "julho": 7,
               "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12}
 R_DOC_DECISAO = re.compile(r"^\d{5,} - (sentenca|acordao)\b")
+R_INTEGRA_DECISAO = re.compile(r"^ver integra d[oa](\(a\))? (sentenca|acordao)\b")
 R_TIPO_DECISAO = re.compile(r"^(sentenca|acordao|julgad[oa]s? (parcialmente )?(procedente|improcedente)|julgad[oa]s? procedente em parte|extint[oa] o processo)")
 R_EV_DESFAV = re.compile(r"^julgad[oa]s? (parcialmente )?procedente|^julgad[oa]s? procedente em parte")
 R_EV_FAV = re.compile(r"^julgad[oa]s? improcedente|^extint[oa] o processo")
@@ -316,6 +317,12 @@ def _evidencia_de_decisao(mv: Movimento) -> str | None:
     for linha in mv.texto.split("\n"):
         if R_DOC_DECISAO.match(norm(linha)):
             return espaco(linha)
+    # Legado: a sentença vem num movimento "Recebimento" (dispositivo cortado) com o link "Ver íntegra
+    # Do(A) Sentença". "Ver íntegra Do(A) Decisão" é decisão interlocutória ou de embargos: não conta.
+    if "projeto de sentenca" not in norm(mv.texto):
+        for linha in mv.texto.split("\n"):
+            if R_INTEGRA_DECISAO.match(norm(espaco(linha))):
+                return espaco(linha)
     return None
 
 

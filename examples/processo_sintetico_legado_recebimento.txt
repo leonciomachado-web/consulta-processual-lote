@@ -1,0 +1,65 @@
+#! sistema: legado
+#! data_consulta: 2025-01-15
+#! fase_base: JULGAMENTO DESFAVORAVEL A CIA EM 1ª INSTANCIA
+#! partes_lista_completa: sim
+#! movimentos_lista_completa: sim
+
+Processo Nº 0000001-80.2025.8.99.0000
+Dados da Serventia
+Comarca
+Comarca Ficticia
+Vara
+1ª Vara Cível
+Dados do Processo
+Competência
+Cível
+Assunto
+Indenização Por Dano Moral
+Classe
+Procedimento Comum
+Localização na Serventia
+Processamento
+Dados dos Personagens
+Autor	FULANO DE TAL SINTETICO
+Advogado	(XX000001) ADVOGADO SINTETICO UM
+Réu	EMPRESA ALFA SINTETICA LTDA
+Advogado	(XX000002) ADVOGADO SINTETICO DOIS
+Movimentação
+Tipo do Movimento: Recebimento
+Data de Recebimento:
+15/09/2025
+Descrição
+Isto posto, NEGO PROVIMENTO AOS EMBARGOS DE DECLARAÇÃO apresentados pelas partes. P.I.
+ Ver íntegra Do(A) Decisão (Original)
+ Ver íntegra do(a) Decisão (Simplificado)
+Ato Assinado
+Visualizar Ato Assinado Digitalmente
+Tipo do Movimento: Juntada - Petição
+Data da juntada:
+10/09/2025
+Descrição da Juntada:
+Documento eletrônico juntado de forma automática.
+Tipo do Movimento: Recebimento
+Data de Recebimento:
+01/08/2025
+Descrição
+Isto posto, JULGO PARCIALMENTE PROCEDENTE O PEDIDO, condenando a ré EMPRESA ALFA SINTETICA LTDA ao pagamento da indenização, a título de danos morais, no v...
+ Ver íntegra Do(A) Sentença (Original)
+ Ver íntegra do(a) Sentença (Simplificado)
+Ato Assinado
+Visualizar Ato Assinado Digitalmente
+Tipo do Movimento: Conclusão ao Juiz
+Data da conclusão:
+20/07/2025
+Juiz:
+JUIZ SINTETICO
+Tipo do Movimento: Recebimento
+Data de Recebimento:
+01/06/2025
+Descrição
+Cite-se a parte ré e intime-se para a audiência.
+Ato Assinado
+Visualizar Ato Assinado Digitalmente
+Libras
+Voz
++ Acessibilidade
