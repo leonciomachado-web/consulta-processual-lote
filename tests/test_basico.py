@@ -797,5 +797,16 @@ class TesteSaidaEPainel(unittest.TestCase):
             self.assertTrue(len(dados["filtros"]) >= 20)
 
 
+class TesteTruncamentoCpf(unittest.TestCase):
+    def test_cpf_com_travessao_e_sublinhado_cortado_no_meio(self):
+        en = chr(0x2013)
+        for corpo in ("123" + en + "456" + en + "789" + en + "09", "123_456_789_09", "123 / 456 / 789 / 09"):
+            longa = "Homologo o acordo " + "palavra " * 5 + "de FULANO " + corpo + " fim"
+            ate = longa.index(corpo)
+            for corte in range(ate + 3, ate + len(corpo)):
+                ev = campos._trecho(longa, campos.R_ACORDO, janela=corte // 2 + 1)
+                self.assertNotRegex(ev or "", "[0-9]{3}[^0-9A-Za-z]{0,6}[0-9]", (corpo, corte))
+
+
 if __name__ == "__main__":
     unittest.main()
