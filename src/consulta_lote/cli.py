@@ -106,7 +106,8 @@ def _carregar_documentos(d: Path, proc) -> int:
     return n
 
 
-_SIGILO_LINHA = re.compile("sigilo[ " + chr(9) + "]*:[ " + chr(9) + "]*(.*)$")
+_SIGILO_VALOR = re.compile("sigilo" + "\s*:[ " + chr(9) + "]*([^" + chr(10) + "]*)")
+_SIGILO_ROTULO = re.compile("nivel" + "\s+de\s+sigilo")
 # valor aceito como público: exatamente "0", "0 (publico)", "0 - publico" ou "publico"
 _VALOR_PUBLICO = re.compile("0([ ]*[-]?[ ]*[(]?publico[)]?)?|publico")
 
@@ -119,20 +120,21 @@ def _normaliza(texto: str) -> str:
 
 
 def _niveis_de_sigilo(texto: str) -> list[str]:
-    """Valor escrito depois de 'sigilo:' em cada ocorrência. Rótulo sem valor na mesma linha só aceita
-    a linha seguinte se ela for, inteira, um valor público estrito; senão entra como string vazia
-    (que _e_publico trata como não público)."""
-    linhas = _normaliza(texto).split(chr(10))
+    """Valor escrito depois de 'sigilo:' em cada ocorrência (qualquer espaço ou quebra antes dos dois-pontos).
+    Rótulo sem valor na mesma linha só aceita a linha seguinte se ela for, inteira, um valor público
+    estrito; senão entra como string vazia (não público). Rótulo 'nivel de sigilo' sem nenhum valor
+    legível também conta como não público."""
+    n = _normaliza(texto)
+    linhas_pos = [(m.start(), m.end(), m.group(1).strip()) for m in _SIGILO_VALOR.finditer(n)]
     valores: list[str] = []
-    for i, linha in enumerate(linhas):
-        m = _SIGILO_LINHA.search(linha)
-        if not m:
-            continue
-        v = m.group(1).strip()
+    for ini, fim, v in linhas_pos:
         if not v:
-            prox = linhas[i + 1].strip() if i + 1 < len(linhas) else ""
-            v = prox if _VALOR_PUBLICO.fullmatch(prox) else ""
+            resto = n[fim:].lstrip(chr(10)).split(chr(10), 1)[0].strip() if n[fim:fim + 1] == chr(10) else ""
+            seguinte = n[fim + 1:].split(chr(10), 1)[0].strip() if n[fim:fim + 1] == chr(10) else ""
+            v = seguinte if _VALOR_PUBLICO.fullmatch(seguinte) else ""
         valores.append(v)
+    faltam = len(_SIGILO_ROTULO.findall(n)) - len(valores)
+    valores.extend([""] * max(0, faltam))
     return valores
 
 

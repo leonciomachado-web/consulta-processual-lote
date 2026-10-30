@@ -46,9 +46,12 @@ def varre(texto: str, onde: str, lista: list[str]) -> list[str]:
     for t in lista:
         if t in baixo:
             achados.append(f"{onde}: termo proibido '{t}'")
-    for m in CNJ.finditer(texto):
-        if not cnj_ficticio(m.group(0)):
-            achados.append(f"{onde}: número de processo (não fictício)")
+    # duas passadas: texto como está e texto sem quebras de linha (número partido em duas linhas)
+    sem_quebra = re.sub("[" + chr(13) + chr(10) + "]+", "", texto)
+    for alvo in (texto, sem_quebra):
+        for m in CNJ.finditer(alvo):
+            if not cnj_ficticio(m.group(0)):
+                achados.append(f"{onde}: número de processo (não fictício)")
     return achados
 
 

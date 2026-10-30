@@ -257,6 +257,11 @@ class TesteVarredura(unittest.TestCase):
         self.assertTrue(self.scan.varre("12345678" + "920218260100", "x", []))
         self.assertFalse(self.scan.varre(FICT1, "x", []))
 
+    def test_numero_partido_em_duas_linhas_e_pego(self):
+        partido = "1234567-89.2021.8" + chr(10) + ".26.0100"
+        self.assertTrue(self.scan.varre(partido, "x", []))
+        self.assertFalse(self.scan.varre(FICT1, "x", []))
+
     def test_falha_fechada_sem_lista(self):
         os.environ["CONSULTA_LOTE_TERMOS"] = str(RAIZ / "nao-existe.txt")
         try:
@@ -547,6 +552,9 @@ class TesteSigiloAmplo(unittest.TestCase):
             "Nível de Sigilo: 01": False,
             "Nível de Sigilo: 0 (Público) extra": False,                  # correspondência completa
             "Nível de Sigilo: 0 - Público": True,
+            "Nível de Sigilo" + chr(10) + ": 1": False,               # quebra antes dos dois-pontos
+            "Nível de Sigilo" + chr(10) + "1 (Segredo)": False,        # rótulo sem dois-pontos nem valor legível
+            "Nível  de   Sigilo   :  0": True,
             "Texto" + chr(10) + "Nível de Sigilo:" + chr(10) + chr(10) + "0": False,   # linha em branco no meio
         }
         for texto, publico in casos.items():
