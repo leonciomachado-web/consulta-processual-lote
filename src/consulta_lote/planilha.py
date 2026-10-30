@@ -10,7 +10,7 @@ from pathlib import Path
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 
-from .campos import NV, Campo, compara_fase
+from .campos import NV, Campo, compara_fase, mascara_cpf
 from .config import proteger_escrita
 from .seguro import neutraliza
 
@@ -84,7 +84,7 @@ def gerar(con: sqlite3.Connection, destino: Path, incluir_trechos_restritos: boo
             )
         ]
         linha += [cmp_, "\n".join(evid), "\n".join(dj), "", "", ""]
-        ws.append([neutraliza(v) for v in linha])
+        ws.append([neutraliza(mascara_cpf(v) if isinstance(v, str) else v) for v in linha])
         for i, (_c, _n, ia) in enumerate(CAMPOS_ORDEM):
             cel = ws.cell(row=ws.max_row, column=4 + i)
             cel.alignment = Alignment(wrap_text=True, vertical="top")

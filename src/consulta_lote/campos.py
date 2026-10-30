@@ -98,7 +98,7 @@ def _trecho(texto_bruto: str, padrao: re.Pattern[str], janela: int = 90) -> str 
             inteiro = espaco(linha)
             corte = inteiro[: janela * 2]
             if len(inteiro) > len(corte):  # não deixa um número partido na ponta (poderia ser um CPF cortado)
-                corte = re.sub("[0-9][0-9. /-]*$", "", corte).rstrip()
+                corte = re.sub("[0-9][0-9" + SEPARADORES + "]*$", "", corte).rstrip()
             return corte
     return None
 
@@ -561,12 +561,29 @@ def compara_fase(fase_base: str | None, fase_tribunal: Campo) -> str:
     return "base_defasada" if ETAPAS[eb] < ETAPAS[et] else "base_adiantada"
 
 
-_CPF = re.compile("(?<![0-9/])[0-9]{3}[. ]?[0-9]{3}[. ]?[0-9]{3}[-/ ]?[0-9]{2}(?![0-9/])")
+# separadores aceitos entre os grupos: espaço, ponto, barra, hífen, espaço sem quebra e travessões unicode
+SEPARADORES = " ./" + chr(0xA0) + chr(0x2010) + chr(0x2011) + chr(0x2012) + chr(0x2013) + chr(0x2014) + chr(0x2015) + "-"
+_CPF = re.compile("(?<![0-9])[0-9]{3}[" + SEPARADORES + "]?[0-9]{3}[" + SEPARADORES + "]?[0-9]{3}[" + SEPARADORES + "]?[0-9]{2}(?![0-9])")
+_CNPJ = re.compile("[0-9]{2}[.][0-9]{3}[.][0-9]{3}/[0-9]{4}-[0-9]{2}")
 
 
 def mascara_cpf(texto: str) -> str:
-    """CPF de pessoa física não é gravado em evidência nem em valor (CNPJ de empresa permanece)."""
-    return _CPF.sub("***.***.***-**", texto or "")
+    """CPF de pessoa física não é gravado em evidência nem em valor. CNPJ de empresa e número de processo
+    permanecem (são protegidos antes da máscara e restaurados depois)."""
+    if not texto:
+        return texto or ""
+    guardados: list[str] = []
+
+    def guarda(m):
+        guardados.append(m.group(0))
+        return "@@" + str(len(guardados) - 1) + "@@"
+
+    protegido = _CNPJ.sub(guarda, texto)
+    protegido = re.sub("[0-9]{7}-[0-9]{2}[.][0-9]{4}[.][0-9][.][0-9]{2}[.][0-9]{4}", guarda, protegido)  # número CNJ
+    protegido = _CPF.sub("***.***.***-**", protegido)
+    for i, g in enumerate(guardados):
+        protegido = protegido.replace("@@" + str(i) + "@@", g)
+    return protegido
 
 
 def extrair(p: Processo, partes_alvo: list[str]) -> list[Campo]:

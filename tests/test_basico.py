@@ -703,5 +703,33 @@ class TesteLevantamento(unittest.TestCase):
         self.assertEqual(lv.linha(c, self._resp([85]))["sistema_provavel"], "legado")
 
 
+class TesteCpfCentral(unittest.TestCase):
+    def test_variantes_extras(self):
+        for v in ("123.456.789-09/2025", "123" + chr(0x2013) + "456" + chr(0x2013) + "789" + chr(0x2013) + "09",
+                  "123" + chr(160) + "456" + chr(160) + "789" + chr(160) + "09", "x/12345678909/y"):
+            self.assertNotIn("789", campos.mascara_cpf("parte " + v), v)
+        self.assertEqual(campos.mascara_cpf("CNPJ 00.000.000/0001-00 ok"), "CNPJ 00.000.000/0001-00 ok")
+        self.assertEqual(campos.mascara_cpf("proc " + FICT1 + " ok"), "proc " + FICT1 + " ok")
+
+    def test_blocos_e_planilha_mascaram_na_saida(self):
+        from consulta_lote import blocos
+        txt = ("#! cnj: 0000003-50.2025.8.99.0000" + chr(10) + "#! movimentos_lista_completa: sim" + chr(10)
+               + "28 jan 2025" + chr(10) + "PARTE FULANO 123.456.789-09 INTIMADA" + chr(10) + "15:08" + chr(10))
+        p = parser.ler(txt)
+        cs = campos.extrair(p, ["X"])
+        with tempfile.TemporaryDirectory() as t:
+            for arq in blocos.gerar(p, cs, Path(t) / "b"):
+                self.assertNotIn("123.456.789", arq.read_text(encoding="utf-8"), arq.name)
+            d = Path(t)
+            con = db.abrir(d)
+            db.gravar(con, d, p.cnj, "123.456.789-09", "", None, "a", cs)  # até o sistema, se tiver CPF
+            from openpyxl import load_workbook
+            ws = load_workbook(planilha.gerar(con, d / "p.xlsx"))["Processos"]
+            for linha in ws.iter_rows(values_only=True):
+                for cel in linha:
+                    self.assertNotIn("123.456.789", str(cel))
+            con.close()
+
+
 if __name__ == "__main__":
     unittest.main()

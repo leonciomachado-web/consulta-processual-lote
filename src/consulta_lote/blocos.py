@@ -16,7 +16,7 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
-from .campos import NV, Campo, compara_fase
+from .campos import NV, Campo, compara_fase, mascara_cpf
 from .config import proteger_escrita
 from .parser import Processo
 from .textos import espaco, norm
@@ -176,7 +176,7 @@ def _manual(nome: str) -> str:
 
 
 def _montar(nome: str, titulo: str, auto: str, existente: str | None) -> str:
-    auto = auto.replace("<!--", "&lt;!--")  # texto do processo não pode forjar os marcadores
+    auto = mascara_cpf(auto.replace("<!--", "&lt;!--"))  # texto do processo não forja marcadores nem leva CPF
     bloco_auto = f"{INICIO}\n{auto}\n{FIM}"
     if existente and (INICIO in existente or FIM in existente):
         if existente.count(INICIO) != 1 or existente.count(FIM) != 1 or existente.index(INICIO) > existente.index(FIM):
