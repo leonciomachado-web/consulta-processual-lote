@@ -100,8 +100,8 @@ def _trecho(texto_bruto: str, padrao: re.Pattern[str], janela: int = 90) -> str 
             corte = inteiro[: janela * 2]
             if len(inteiro) > len(corte):  # não deixa um número partido na ponta (poderia ser um CPF cortado)
                 while corte and _CAUDA_NUMERICA.search(_norm_texto(corte)):  # decide na forma normalizada, corta o original
-                corte = corte[:-1]
-            corte = corte.rstrip()
+                    corte = corte[:-1]
+                corte = corte.rstrip()
             return corte
     return None
 
