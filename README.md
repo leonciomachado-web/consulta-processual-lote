@@ -93,4 +93,6 @@ falham fechados: sem a lista local de termos, o commit é bloqueado.
 
 ## Licença
 
-A definir pelo mantenedor antes de tornar o repositório público.
+[PolyForm Noncommercial License 1.0.0](LICENSE): uso livre para fins **não comerciais**, com
+código aberto para leitura, estudo e modificação. Uso comercial exige licença à parte do
+mantenedor. Não é licença de código aberto no sentido da OSI.
