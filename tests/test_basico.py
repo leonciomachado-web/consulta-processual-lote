@@ -449,6 +449,28 @@ class TesteTopoPje(unittest.TestCase):
         c = estado(campos.extrair(p, ["EMPRESA ALFA"]), "parte_alvo_no_polo_passivo")
         self.assertEqual(c.estado, campos.SIM)
 
+    def test_topo_com_dois_separadores_e_ambiguo(self):
+        p = self._proc("FULANO X BELTRANO X EMPRESA ALFA SINTETICA LTDA. e outros")
+        self.assertEqual([x for x in p.personagens if x.polo in ("ativo", "passivo")], [])
+
+    def test_topo_de_outro_processo_e_rejeitado(self):
+        nl = chr(10)
+        txt = nl.join(["#! cnj: " + FICT1, "PJEC 0000002-65.2025.8.99.0000 ", "FULANO X EMPRESA ALFA SINTETICA LTDA.", "09 set 2026", "X", "11:44", ""])
+        self.assertEqual([x for x in parser.ler(txt).personagens if x.polo in ("ativo", "passivo")], [])
+
+    def test_topo_nao_afirma_acesso_publico_e_evidencia_e_so_o_nome(self):
+        p = self._proc("FULANO DE TAL SINTETICO X EMPRESA ALFA SINTETICA LTDA. e outros")
+        pas = next(x for x in p.personagens if x.polo == "passivo")
+        self.assertEqual(pas.acesso, "nao_testado")
+        self.assertEqual(pas.linha, "EMPRESA ALFA SINTETICA LTDA.")
+        self.assertNotIn("FULANO", pas.linha)
+
+    def test_lista_completa_sem_nenhum_reu_nao_vira_nao(self):
+        nl = chr(10)
+        txt = nl.join(["#! cnj: " + FICT1, "#! partes_lista_completa: sim", "Dados dos Personagens", "Autor", "FULANO DE TAL SINTETICO", "Movimentação", ""])
+        c = estado(campos.extrair(parser.ler(txt), ["EMPRESA ALFA"]), "parte_alvo_no_polo_passivo")
+        self.assertNotEqual(c.estado, campos.NAO)
+
     def test_topo_nunca_vira_nao(self):
         p = self._proc("FULANO DE TAL SINTETICO X OUTRA EMPRESA LTDA. e outros")
         c = estado(campos.extrair(p, ["EMPRESA ALFA"]), "parte_alvo_no_polo_passivo")

@@ -280,24 +280,32 @@ def _personagens_de_colunas(linhas: list[str]) -> list[Personagem]:
 _RE_TOPO_PJE = re.compile(r"^[A-Za-zÀ-ÿ]{2,20} " + PADRAO_CNJ.pattern + r"\s*$")
 
 
-def _personagens_de_topo_pje(linhas: list[str]) -> list[Personagem]:
+def _personagens_de_topo_pje(linhas: list[str], cnj) -> list[Personagem]:
     """Autos do PJe: 'CLASSE <cnj>' e, na linha seguinte, 'POLO ATIVO X POLO PASSIVO e outros'. O ' X ' separa
-    os polos. Mostra só a primeira parte de cada polo: fonte parcial, nunca prova que uma parte NÃO consta."""
+    os polos. Mostra só a primeira parte de cada polo: fonte parcial, nunca prova que uma parte NÃO consta.
+    Falha fechado: o número da linha tem de ser o do processo e a linha tem de ter um único ' X '."""
+    if cnj is None:
+        return []
     nz = [l.strip() for l in linhas[:12] if l.strip()]
     for k, l in enumerate(nz[:-1]):
         if not _RE_TOPO_PJE.match(l):
             continue
+        mc = PADRAO_CNJ.search(l)
+        achado = tratar(mc.group(0)) if mc else None
+        if achado is None or achado.formatado != cnj.formatado:
+            return []  # topo de outro processo
         partes = nz[k + 1]
-        if " X " not in partes:
-            return []
+        if partes.count(" X ") != 1:
+            return []  # ambíguo: nome com ' X ' ou linha sem separador
         ativo, passivo = partes.split(" X ", 1)
         out: list[Personagem] = []
         for polo, bruto in (("ativo", ativo), ("passivo", passivo)):
             nome = espaco(re.sub(r"\s+e outros?\s*$", "", bruto.strip()))
             if nome:
+                # tela com login: o nível de acesso não é afirmado; a evidência é só o nome da parte
                 out.append(Personagem(papel="autor" if polo == "ativo" else "reu", polo=polo, nome=nome,
-                                      linha=espaco(partes), documento="evento: topo dos autos (polo ativo X polo passivo)",
-                                      acesso="publico"))
+                                      linha=nome, documento="evento: topo dos autos (polo ativo X polo passivo)",
+                                      acesso="nao_testado"))
         return out
     return []
 
@@ -366,7 +374,7 @@ def ler(texto_bruto: str) -> Processo:
         meta=meta,
         capa=capa,
         distribuicao=dist,
-        personagens=_junta_personagens(_extrai_personagens(corpo), _personagens_de_eventos(eventos) + _personagens_de_colunas(corpo) + _personagens_de_topo_pje(corpo)),
+        personagens=_junta_personagens(_extrai_personagens(corpo), _personagens_de_eventos(eventos) + _personagens_de_colunas(corpo) + _personagens_de_topo_pje(corpo, cnj)),
         movimentos=eventos,
         documentos=docs,
         texto=texto,

@@ -224,7 +224,10 @@ def partes(p: Processo, partes_alvo: list[str]) -> Campo:
                 localizacao=(per.documento if per.documento.startswith("evento") else f"cabeçalho de {per.documento}")
                 if per.documento else f"personagem ({per.papel})",
             )
-    if p.partes_lista_completa and not de_documento:
+    # NAO só se a lista dita completa trouxe de fato um réu: sem nenhum réu da própria lista (só capa, topo ou
+    # eventos), a lista não foi lida e a ausência da parte-alvo não prova nada.
+    tem_reu_da_lista = any(per.polo == "passivo" and not per.documento for per in personagens)
+    if p.partes_lista_completa and not de_documento and tem_reu_da_lista:
         # lista inteira lida e a parte-alvo não está no polo passivo
         no_ativo = any(per.polo == "ativo" and any(a in norm(per.nome) for a in alvos) for per in personagens)
         ev = personagens[0].linha
