@@ -64,6 +64,12 @@ Formato do texto colado: veja `examples/processo_sintetico_1.txt` (completo) e
 o sistema, se a lista de partes e a de movimentos foram lidas por inteiro, e a fase da sua base.
 Se um documento abriu sem login, cole o texto entre `=== INTEGRA rótulo ===` e `=== FIM ===`.
 
+## Documentação
+
+- `docs/instalacao-e-uso-windows.md`: instalar e rodar no seu computador.
+- `docs/rotas-por-sistema.md`: o que copiar de cada sistema de tribunal e o que cada um entrega.
+- `docs/analise-por-blocos.md` e `docs/modelo-planilha-e-painel.md`: análise por blocos, planilha e painel.
+
 ## Privacidade (o que o programa garante)
 
 - Pasta de dados fora do repositório; se estiver dentro de outro repositório git, precisa estar
