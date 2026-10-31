@@ -203,7 +203,10 @@ def partes(p: Processo, partes_alvo: list[str]) -> Campo:
     if not partes_alvo:
         return _nv("parte_alvo_no_polo_passivo", "nao_consultado", "nenhuma parte-alvo configurada")
     de_documento = not p.personagens
-    personagens = p.personagens or _personagens_de_documentos(p)
+    personagens = list(p.personagens)
+    if not (p.partes_lista_completa and personagens):  # lista parcial (capa, colunas, topo): somar os cabeçalhos das peças
+        ja = {norm(x.nome) for x in personagens}
+        personagens += [x for x in _personagens_de_documentos(p) if norm(x.nome) not in ja]
     if not personagens:
         return _nv("parte_alvo_no_polo_passivo", "nao_consultado", "lista de partes não colada; abra a aba de partes")
     alvos = [norm(a) for a in partes_alvo]

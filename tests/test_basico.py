@@ -404,6 +404,57 @@ class TesteLegadoSentencaEmRecebimento(unittest.TestCase):
         self.assertEqual(estado(c, "decisao").estado, campos.NV)
 
 
+class TesteCnjDoCabecalho(unittest.TestCase):
+    """Sem 'Processo Nº' no texto, vale o '#! cnj' do cabeçalho, não um número parecido achado no corpo."""
+
+    def test_cabecalho_vence_numero_parecido_no_corpo(self):
+        nl = chr(10)
+        txt = nl.join(["#! sistema: pje", "#! cnj: " + FICT1, "", "09 set 2026", "CERTIDÃO",
+                       "Referência 0000002-65.2025.8.99.0000 do sistema antigo", "11:44", ""])
+        self.assertEqual(parser.ler(txt).cnj.formatado, FICT1)
+
+    def test_sem_cabecalho_ainda_acha_no_corpo(self):
+        txt = "Processo Nº " + FICT1 + chr(10) + "Dados da Serventia" + chr(10)
+        self.assertEqual(parser.ler(txt).cnj.formatado, FICT1)
+
+
+class TesteTopoPje(unittest.TestCase):
+    """Autos do PJe começam com 'CLASSE <cnj>' e a linha 'POLO ATIVO X POLO PASSIVO e outros'."""
+
+    def _proc(self, linha_partes):
+        nl = chr(10)
+        txt = nl.join(["#! sistema: pje", "#! cnj: " + FICT1, "", "PJEC " + FICT1 + " ", linha_partes,
+                       "09 set 2026", "CONCLUSOS AO JUIZ", "11:44", ""])
+        return parser.ler(txt)
+
+    def test_polo_vem_do_topo(self):
+        p = self._proc("FULANO DE TAL SINTETICO X EMPRESA ALFA SINTETICA LTDA. e outros")
+        polos = {(x.polo, x.nome) for x in p.personagens}
+        self.assertIn(("ativo", "FULANO DE TAL SINTETICO"), polos)
+        self.assertIn(("passivo", "EMPRESA ALFA SINTETICA LTDA."), polos)
+        c = estado(campos.extrair(p, ["EMPRESA ALFA"]), "parte_alvo_no_polo_passivo")
+        self.assertEqual(c.estado, campos.SIM)
+        self.assertTrue(c.evidencia_confere)
+
+    def test_abreviacao_da_classe_com_minusculas(self):
+        nl = chr(10)
+        txt = nl.join(["#! cnj: " + FICT1, "ProceComCiv " + FICT1 + " ", "FULANO DE TAL SINTETICO X EMPRESA ALFA SINTETICA LTDA. e outros", "09 set 2026", "X", "11:44", ""])
+        self.assertIn("passivo", {x.polo for x in parser.ler(txt).personagens})
+
+    def test_topo_parcial_nao_esconde_o_cabecalho_da_peca(self):
+        nl = chr(10)
+        txt = nl.join(["#! cnj: " + FICT1, "PJEC " + FICT1 + " ", "FULANO DE TAL SINTETICO X Não encontrado", "09 set 2026", "SENTENÇA", "11:44", ""])
+        p = parser.ler(txt)
+        p.documentos.append(parser.Documento(rotulo="sentenca-z", texto="AUTOR: FULANO DE TAL SINTETICO" + nl + "RÉU: EMPRESA ALFA SINTETICA LTDA", acesso="publico"))
+        c = estado(campos.extrair(p, ["EMPRESA ALFA"]), "parte_alvo_no_polo_passivo")
+        self.assertEqual(c.estado, campos.SIM)
+
+    def test_topo_nunca_vira_nao(self):
+        p = self._proc("FULANO DE TAL SINTETICO X OUTRA EMPRESA LTDA. e outros")
+        c = estado(campos.extrair(p, ["EMPRESA ALFA"]), "parte_alvo_no_polo_passivo")
+        self.assertNotEqual(c.estado, campos.NAO)
+
+
 class TesteDesistencia(unittest.TestCase):
     """'Ciência, com renúncia ao prazo' é ato de prazo, não desistência da ação nem renúncia ao direito."""
 

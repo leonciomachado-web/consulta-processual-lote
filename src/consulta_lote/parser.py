@@ -277,6 +277,31 @@ def _personagens_de_colunas(linhas: list[str]) -> list[Personagem]:
     return out
 
 
+_RE_TOPO_PJE = re.compile(r"^[A-Za-zÀ-ÿ]{2,20} " + PADRAO_CNJ.pattern + r"\s*$")
+
+
+def _personagens_de_topo_pje(linhas: list[str]) -> list[Personagem]:
+    """Autos do PJe: 'CLASSE <cnj>' e, na linha seguinte, 'POLO ATIVO X POLO PASSIVO e outros'. O ' X ' separa
+    os polos. Mostra só a primeira parte de cada polo: fonte parcial, nunca prova que uma parte NÃO consta."""
+    nz = [l.strip() for l in linhas[:12] if l.strip()]
+    for k, l in enumerate(nz[:-1]):
+        if not _RE_TOPO_PJE.match(l):
+            continue
+        partes = nz[k + 1]
+        if " X " not in partes:
+            return []
+        ativo, passivo = partes.split(" X ", 1)
+        out: list[Personagem] = []
+        for polo, bruto in (("ativo", ativo), ("passivo", passivo)):
+            nome = espaco(re.sub(r"\s+e outros?\s*$", "", bruto.strip()))
+            if nome:
+                out.append(Personagem(papel="autor" if polo == "ativo" else "reu", polo=polo, nome=nome,
+                                      linha=espaco(partes), documento="evento: topo dos autos (polo ativo X polo passivo)",
+                                      acesso="publico"))
+        return out
+    return []
+
+
 def _junta_personagens(da_lista: list[Personagem], dos_eventos: list[Personagem]) -> list[Personagem]:
     """Lista da capa mais partes que os eventos identificam pelo polo, sem duplicar o mesmo nome."""
     out = list(da_lista)
@@ -316,9 +341,11 @@ def ler(texto_bruto: str) -> Processo:
     texto = "\n".join(corpo)
     mc = re.search(r"Processo\s+N[ºo°]?\s*(" + PADRAO_CNJ.pattern + r")", texto)
     cnj = tratar(mc.group(1)) if mc else None
+    if cnj is None:  # o cabeçalho "#! cnj" vale mais que um número parecido achado no corpo
+        cnj = tratar(meta.get("cnj"))
     if cnj is None:
         m2 = PADRAO_CNJ.search(texto)
-        cnj = tratar(m2.group(0)) if m2 else tratar(meta.get("cnj"))
+        cnj = tratar(m2.group(0)) if m2 else None
 
     # capa: rótulo numa linha, valor na linha seguinte
     capa: dict[str, str] = {}
@@ -339,7 +366,7 @@ def ler(texto_bruto: str) -> Processo:
         meta=meta,
         capa=capa,
         distribuicao=dist,
-        personagens=_junta_personagens(_extrai_personagens(corpo), _personagens_de_eventos(eventos) + _personagens_de_colunas(corpo)),
+        personagens=_junta_personagens(_extrai_personagens(corpo), _personagens_de_eventos(eventos) + _personagens_de_colunas(corpo) + _personagens_de_topo_pje(corpo)),
         movimentos=eventos,
         documentos=docs,
         texto=texto,
