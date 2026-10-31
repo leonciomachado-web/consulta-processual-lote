@@ -396,5 +396,5 @@ def ler(texto_bruto: str) -> Processo:
         movimentos=eventos,
         documentos=docs,
         texto=texto,
-        historico_anterior_lido=bool(antigo_pje),
+        historico_anterior_lido=bool(antigo_pje) or norm(meta.get("linha_do_tempo", "")).startswith("completa"),
     )

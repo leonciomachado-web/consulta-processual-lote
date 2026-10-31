@@ -473,6 +473,20 @@ class TesteHistoricoMigrado(unittest.TestCase):
         so_eproc = txt.split("=== HISTÓRICO")[0]
         self.assertEqual(estado(campos.extrair(parser.ler(so_eproc), []), "fase").estado, campos.NV)
 
+    def test_pje_nativo_com_linha_do_tempo_completa_e_migracao_tem_fase_sugerida(self):
+        nl = chr(10)
+        txt = nl.join([
+            "#! sistema: pje", "#! cnj: " + FICT1, "#! movimentos_lista_completa: sim", "#! linha_do_tempo: completa_31-10-2026", "",
+            "10 jan 2025", "15 jun 2026", "",
+            "MIGRADA A TRAMITAÇÃO DO PROCESSO DO SISTEMA ELETRÔNICO ORIGINÁRIO PARA O OUTRO SISTEMA ELETRÔNICO", "14:00",
+            "05 fev 2025", "", "JUNTADA DE PETIÇÃO DE PETIÇÃO", "09:00", ""])
+        p = parser.ler(txt)
+        self.assertTrue(p.historico_anterior_lido)
+        f = estado(campos.extrair(p, []), "fase")
+        self.assertEqual((f.estado, f.valor, f.revisao), (campos.SIM, "inicial", "pendente"))
+        sem = txt.replace("#! linha_do_tempo: completa_31-10-2026" + nl, "")
+        self.assertEqual(estado(campos.extrair(parser.ler(sem), []), "fase").estado, campos.NV)
+
     def test_so_eproc_continua_igual(self):
         nl = chr(10)
         txt = nl.join(["#! sistema: eproc", "#! cnj: " + FICT1, "", "Eventos", "Evento Data/Hora Descrição Usuário Documentos", "", "1", "19/06/2025 09:00:00 Distribuído por sorteio", ""])
