@@ -621,8 +621,13 @@ def fase(p: Processo) -> Campo:
         return _campo_de_mov("fase", SIM, "postulatória", mv, t)
     # Sugestão (decisão do Luís, 30/10): lista completa de eventos, com distribuição, e nenhum sinal de etapa
     # posterior (citação, contestação, saneamento, sentença, migração) = fase inicial. A revisão humana confirma.
-    if p.movimentos_lista_completa and not any("migrad" in norm(mv.texto) for mv in p.movimentos):
+    # Processo migrado só entra aqui se o histórico do sistema antigo foi lido por inteiro.
+    if p.movimentos_lista_completa and (p.historico_anterior_lido or not any("migrad" in norm(mv.texto) for mv in p.movimentos)):
         achado = _acha_em_movimentos(p, re.compile(r"distribu"))
+        if not achado and p.historico_anterior_lido and p.movimentos:
+            # A linha do tempo do PJe não traz o evento de distribuição: o mais antigo é o último da lista.
+            mv = p.movimentos[-1]
+            achado = (mv, espaco(mv.texto)[:200])
         if achado:
             mv, t = achado
             c = _campo_de_mov("fase", SIM, "inicial", mv, t)

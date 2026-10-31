@@ -80,6 +80,7 @@ class Processo:
     movimentos: list[Movimento] = field(default_factory=list)
     documentos: list[Documento] = field(default_factory=list)
     texto: str = ""  # corpo bruto, sem metadados
+    historico_anterior_lido: bool = False  # processo migrado com o histórico do sistema antigo (PJe) lido por inteiro
 
     @property
     def sistema(self) -> str:
@@ -168,6 +169,7 @@ _MESES = {"jan": 1, "fev": 2, "mar": 3, "abr": 4, "mai": 5, "jun": 6,
 _RE_DATA_PJE = re.compile(r"^(\d{1,2}) (jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez) (\d{4})$", re.I)
 _RE_HORA = re.compile(r"^\d{2}:\d{2}$")
 _RE_LINHA_DOC = re.compile(r"^\d{5,}\s*-\s*(.+)$")
+_MARCA_HIST_PJE = "=== HISTÓRICO DO SISTEMA ANTERIOR (PJe) ==="
 
 
 def _extrai_movimentos_pje(linhas: list[str]) -> list[Movimento]:
@@ -369,9 +371,20 @@ def ler(texto_bruto: str) -> Processo:
         dist = md.group(1)
 
     antigo = _extrai_movimentos(corpo)  # blocos "Tipo do Movimento:" (portal do sistema legado)
-    novo = _extrai_movimentos_pje(corpo) or _extrai_eventos_eproc(corpo)
+    # Processo migrado do PJe para o eproc: o arquivo traz o bloco "HISTÓRICO DO SISTEMA ANTERIOR (PJe)"
+    # com a linha do tempo antiga. Os eventos do eproc continuam valendo; o bloco do PJe entra depois.
+    k_pje = next((k for k, l in enumerate(corpo) if l.strip() == _MARCA_HIST_PJE), None)
+    antigo_pje: list[Movimento] = []
+    atual = corpo
+    if k_pje is not None:
+        resto = corpo[k_pje + 1:]
+        fim = next((k for k, l in enumerate(resto) if l.strip().startswith("=== HISTÓRICO DO SISTEMA ANTERIOR")), len(resto))
+        antigo_pje = _extrai_movimentos_pje(resto[:fim])
+        atual = corpo[:k_pje]
+    novo = _extrai_movimentos_pje(atual) or _extrai_eventos_eproc(atual)
     # Processo migrado: eventos do sistema novo primeiro e, depois, o histórico do sistema antigo.
-    eventos = (novo + antigo) if (antigo and novo) else (antigo or novo)
+    anteriores = antigo_pje + antigo
+    eventos = (novo + anteriores) if (anteriores and novo) else (anteriores or novo)
     for i, mv in enumerate(eventos):
         mv.indice = i
     return Processo(
@@ -383,4 +396,5 @@ def ler(texto_bruto: str) -> Processo:
         movimentos=eventos,
         documentos=docs,
         texto=texto,
+        historico_anterior_lido=bool(antigo_pje),
     )

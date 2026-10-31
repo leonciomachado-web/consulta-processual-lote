@@ -435,6 +435,44 @@ class TesteHistoricoMigrado(unittest.TestCase):
         self.assertEqual(f.valor, "sentenciado")
         self.assertTrue(f.evidencia_confere)
 
+    def test_historico_do_pje_soma_ao_eproc_sem_descartar_o_eproc(self):
+        nl = chr(10)
+        txt = nl.join([
+            "#! sistema: eproc", "#! cnj: " + FICT1, "#! movimentos_lista_completa: sim", "",
+            "Eventos", "Evento Data/Hora Descrição Usuário Documentos", "",
+            "2", "20/06/2026 10:00:00 Migrada a tramitação do processo para o sistema eletrônico",
+            "1", "19/06/2026 09:00:00 Autos incluídos no Juízo 100% Digital", "",
+            "=== HISTÓRICO DO SISTEMA ANTERIOR (PJe) ===",
+            "10 jan 2025", "15 jun 2026", "",
+            "CONCLUSOS PARA JULGAMENTO", "14:00",
+            "01 mar 2025", "", "AUDIÊNCIA DE CONCILIAÇÃO REALIZADA", "11:00",
+            "10 jan 2025", "", "DISTRIBUÍDO POR SORTEIO", "09:00", ""])
+        p = parser.ler(txt)
+        tipos = [m.tipo.lower() for m in p.movimentos]
+        self.assertTrue(any("migrada" in t for t in tipos))
+        self.assertTrue(any("autos incluídos" in t for t in tipos))
+        self.assertTrue(any("distribu" in t for t in tipos))
+        self.assertLess(next(i for i, t in enumerate(tipos) if "migrada" in t), next(i for i, t in enumerate(tipos) if "distribu" in t))
+        self.assertEqual([m.indice for m in p.movimentos], list(range(len(p.movimentos))))
+
+    def test_migrado_com_historico_do_pje_lido_tem_fase_inicial_como_sugestao(self):
+        nl = chr(10)
+        txt = nl.join([
+            "#! sistema: eproc", "#! cnj: " + FICT1, "#! movimentos_lista_completa: sim", "",
+            "Eventos", "Evento Data/Hora Descrição Usuário Documentos", "",
+            "1", "20/06/2026 10:00:00 Migrada a tramitação do processo para o sistema eletrônico", "",
+            "=== HISTÓRICO DO SISTEMA ANTERIOR (PJe) ===",
+            "10 jan 2025", "15 jun 2026", "",
+            "JUNTADA DE PETIÇÃO DE PETIÇÃO", "14:00", "05 fev 2025", "", "EXPEDIÇÃO DE OUTROS DOCUMENTOS.", "09:00", ""])
+        p = parser.ler(txt)
+        self.assertTrue(p.historico_anterior_lido)
+        f = estado(campos.extrair(p, []), "fase")
+        self.assertEqual((f.estado, f.valor), (campos.SIM, "inicial"))
+        self.assertEqual(f.revisao, "pendente")
+        # sem o histórico do PJe, a migração continua bloqueando a fase inicial
+        so_eproc = txt.split("=== HISTÓRICO")[0]
+        self.assertEqual(estado(campos.extrair(parser.ler(so_eproc), []), "fase").estado, campos.NV)
+
     def test_so_eproc_continua_igual(self):
         nl = chr(10)
         txt = nl.join(["#! sistema: eproc", "#! cnj: " + FICT1, "", "Eventos", "Evento Data/Hora Descrição Usuário Documentos", "", "1", "19/06/2025 09:00:00 Distribuído por sorteio", ""])
