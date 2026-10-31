@@ -627,7 +627,8 @@ def fase(p: Processo) -> Campo:
         if not achado and p.historico_anterior_lido and p.movimentos:
             # A linha do tempo do PJe não traz o evento de distribuição: o mais antigo é o último da lista.
             mv = p.movimentos[-1]
-            achado = (mv, espaco(mv.texto)[:200])
+            t0 = _trecho(mv.texto, re.compile("."))  # corte seguro: não deixa número partido (CPF) na ponta
+            achado = (mv, t0) if t0 else None
         if achado:
             mv, t = achado
             c = _campo_de_mov("fase", SIM, "inicial", mv, t)
