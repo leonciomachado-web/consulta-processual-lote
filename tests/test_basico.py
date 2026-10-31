@@ -404,6 +404,59 @@ class TesteLegadoSentencaEmRecebimento(unittest.TestCase):
         self.assertEqual(estado(c, "decisao").estado, campos.NV)
 
 
+class TesteLacunasFaseEAcordo(unittest.TestCase):
+    """Decisões do Luís (30/10): acordo homologado é categoria própria; fase inicial vira sugestão quando a
+    lista de eventos está completa e não há citação, contestação, saneamento, sentença nem migração."""
+
+    def _eproc(self, eventos, completa=True):
+        nl = chr(10)
+        cab = ["#! sistema: eproc", "#! cnj: " + FICT1] + (["#! movimentos_lista_completa: sim"] if completa else [])
+        txt = nl.join(cab + ["", "Eventos", "Evento Data/Hora Descrição Usuário Documentos", ""])
+        for n, (data, desc) in reversed(list(enumerate(eventos, start=1))):
+            txt += str(n) + nl + data + " " + desc + nl
+        return parser.ler(txt)
+
+    EV_INICIAIS = [("10/06/2025 09:00:00", "Distribuído por sorteio"),
+                   ("11/06/2025 10:00:00", "Autos incluídos no Juízo 100% Digital"),
+                   ("12/06/2025 10:00:00", "Expedição de documento - Mandado")]
+
+    def test_fase_inicial_sugerida_sem_citacao(self):
+        f = estado(campos.extrair(self._eproc(self.EV_INICIAIS), []), "fase")
+        self.assertEqual(f.estado, campos.SIM)
+        self.assertEqual(f.valor, "inicial")
+        self.assertEqual(f.revisao, "pendente")
+        self.assertIn("Distribu", f.evidencia)
+        self.assertTrue(f.evidencia_confere)
+
+    def test_fase_inicial_nao_vale_com_migracao(self):
+        ev = self.EV_INICIAIS + [("13/06/2025 10:00:00", "Migrada a tramitação do processo para o sistema")]
+        self.assertEqual(estado(campos.extrair(self._eproc(ev), []), "fase").estado, campos.NV)
+
+    def test_fase_inicial_nao_vale_sem_lista_completa(self):
+        self.assertEqual(estado(campos.extrair(self._eproc(self.EV_INICIAIS, completa=False), []), "fase").estado, campos.NV)
+
+    def test_fase_inicial_nao_vale_com_citacao(self):
+        ev = self.EV_INICIAIS + [("13/06/2025 10:00:00", "Expedida/certificada a citação eletrônica")]
+        self.assertNotEqual(estado(campos.extrair(self._eproc(ev), []), "fase").valor, "inicial")
+
+    def test_compara_fase_inicial_com_base_inicial(self):
+        f = estado(campos.extrair(self._eproc(self.EV_INICIAIS), []), "fase")
+        self.assertEqual(campos.compara_fase("FASE INICIAL", f), "coincide")
+
+    def test_acordo_homologado_e_categoria_propria(self):
+        ev = self.EV_INICIAIS + [("20/06/2025 10:00:00", "Homologada a Transação")]
+        p = self._eproc(ev)
+        j = next(c for c in campos.decisao(p, parte_passiva=True) if c.campo == "decisao_juizo")
+        self.assertEqual(j.estado, campos.SIM)
+        self.assertTrue(j.valor.startswith("ACORDO HOMOLOGADO"))
+        self.assertNotIn("FAVOR", j.valor.split("(")[0])
+        self.assertIn("Homologada a Transa", j.evidencia)
+
+    def test_sem_acordo_nao_vira_categoria_acordo(self):
+        j = next(c for c in campos.decisao(self._eproc(self.EV_INICIAIS), parte_passiva=True) if c.campo == "decisao_juizo")
+        self.assertEqual(j.estado, campos.NV)
+
+
 class TesteCnjDoCabecalho(unittest.TestCase):
     """Sem 'Processo Nº' no texto, vale o '#! cnj' do cabeçalho, não um número parecido achado no corpo."""
 

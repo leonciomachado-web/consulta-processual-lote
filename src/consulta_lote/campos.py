@@ -441,6 +441,19 @@ def decisao(p: Processo, parte_passiva: bool = False) -> list[Campo]:
         return campos
     r = classificar_resultado(p)
     if r is None:
+        # Acordo homologado é categoria própria (decisão do Luís, 30/10): a regra não diz quem ganhou;
+        # a revisão humana classifica pelo valor pago.
+        ac = _acha_em_movimentos(p, R_ACORDO) or _acha_em_documentos(p, R_ACORDO)
+        if ac:
+            origem, trecho = ac
+            base = (_campo_de_mov("decisao_juizo", SIM, "", origem, trecho) if isinstance(origem, Movimento)
+                    else _campo_de_doc("decisao_juizo", SIM, "", origem, trecho))
+            juizo.estado, juizo.motivo = SIM, ""
+            juizo.valor = ("ACORDO HOMOLOGADO (sugestão por regra; a revisão humana classifica pelo valor pago). "
+                           "A regra não decide favorável ou desfavorável.")
+            juizo.evidencia, juizo.localizacao, juizo.fonte = base.evidencia, base.localizacao, base.fonte
+            juizo.data_da_fonte, juizo.acesso_documento = base.data_da_fonte, base.acesso_documento
+            juizo.confianca, juizo.revisao = "regra", "pendente"
         return campos
     rotulo, trecho, loc, fonte, acesso = r
     juizo.estado, juizo.motivo = SIM, ""
@@ -533,6 +546,15 @@ def fase(p: Processo) -> Campo:
     if achado:
         mv, t = achado
         return _campo_de_mov("fase", SIM, "postulatória", mv, t)
+    # Sugestão (decisão do Luís, 30/10): lista completa de eventos, com distribuição, e nenhum sinal de etapa
+    # posterior (citação, contestação, saneamento, sentença, migração) = fase inicial. A revisão humana confirma.
+    if p.movimentos_lista_completa and not any("migrad" in norm(mv.texto) for mv in p.movimentos):
+        achado = _acha_em_movimentos(p, re.compile(r"distribu"))
+        if achado:
+            mv, t = achado
+            c = _campo_de_mov("fase", SIM, "inicial", mv, t)
+            c.confianca, c.revisao = "regra", "pendente"
+            return c
     return _nv("fase", _motivo_ausencia(p))
 
 
@@ -542,6 +564,7 @@ def fase(p: Processo) -> Campo:
 ETAPAS = {"inicial": 1, "instrutoria": 2, "sentenca": 3, "transito": 4, "encerrado": 5}
 _ETAPA_TRIBUNAL = {
     "postulatória": "inicial",
+    "inicial": "inicial",
     "instrutória": "instrutoria",
     "sentenciado": "sentenca",
     "aguardando trânsito em julgado": "sentenca",
