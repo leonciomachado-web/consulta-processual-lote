@@ -432,7 +432,80 @@ def classificar_resultado(p: Processo):
     return None
 
 
+# ---- acórdão de 2º grau: sobrepõe o resultado de 1º grau -------------------------
+R_APELANTE = re.compile(r"^apelante:\s*.*?\((autor|autora|requerente|reu|re|requerido|requerida)\)$")
+R_PAPEL_ATIVO = {"autor", "autora", "requerente"}
+R_2G_DESPROV = re.compile(r"desprovid|negar provimento|negou-se provimento|nega-se provimento|negado provimento|mantendo integralmente|mantida a sentenca")
+R_2G_PARCIAL = re.compile(r"parcialmente provid|parcial provimento")
+R_2G_PROV = re.compile(r"(?<!des)provid[oa]\b|dar provimento|deu-se provimento|da-se provimento")
+
+
+def resultado_segundo_grau(p: Processo):
+    """Lê o acórdão de 2º grau guardado como documento (rótulo com '2grau' e 'acordao'). Devolve
+    (rotulo, motivo, trecho literal, documento) ou None. Só decide quando há um único polo apelante e um
+    resultado claro; apelantes dos dois polos ou recursos com resultados diferentes ficam para a revisão
+    humana. Condenação mantida, mesmo reduzida, segue DESFAVORÁVEL (critério do cliente)."""
+    for d in p.documentos:
+        rot = norm(d.rotulo)
+        if "2grau" not in rot or "acordao" not in rot:
+            continue
+        n = norm(d.texto)
+        polos = {m.group(1) for m in (R_APELANTE.match(norm(l)) for l in d.texto.split("\n")) if m}
+        if len(polos) != 1:
+            continue  # sem apelante com polo, ou apelantes dos dois polos
+        autor = next(iter(polos)) in R_PAPEL_ATIVO
+        desprov, parcial = bool(R_2G_DESPROV.search(n)), bool(R_2G_PARCIAL.search(n))
+        prov = bool(R_2G_PROV.search(n)) or "reformad" in n
+        if desprov and (parcial or prov):
+            continue  # resultados diferentes no mesmo acórdão
+        if desprov:
+            chave, motivo = "mantem", "recurso desprovido: resultado de 1º grau mantido"
+        elif parcial:
+            chave = "parcial"
+            motivo = "recurso da parte autora parcialmente provido: condenação agravada" if autor else "recurso da ré parcialmente provido: condenação mantida em valor menor"
+        elif prov:
+            chave = "provido"
+            motivo = "recurso da parte autora provido: condenação agravada" if autor else "recurso da ré provido: condenação afastada"
+        else:
+            continue
+        if chave == "mantem":
+            rotulo = "MANTIDO"
+        elif autor:
+            rotulo = "DESFAVORÁVEL"
+        else:
+            rotulo = "DESFAVORÁVEL" if chave == "parcial" else "FAVORÁVEL"
+        rx = R_2G_DESPROV if chave == "mantem" else (R_2G_PARCIAL if chave == "parcial" else re.compile(R_2G_PROV.pattern + "|reformad"))
+        for linha in d.texto.split("\n"):
+            if rx.search(norm(linha)):
+                return rotulo, motivo, espaco(linha), d
+    return None
+
+
 def decisao(p: Processo, parte_passiva: bool = False) -> list[Campo]:
+    """1º grau (existência e resultado pelo critério do cliente) e, se houver acórdão guardado, 2º grau."""
+    campos = _decisao_1grau(p, parte_passiva)
+    if not parte_passiva:
+        return campos
+    s2 = resultado_segundo_grau(p)
+    if s2 is None:
+        return campos
+    rotulo, motivo, trecho, d = s2
+    juizo = next(c for c in campos if c.campo == "decisao_juizo")
+    if rotulo == "MANTIDO":
+        if juizo.estado == SIM:
+            juizo.valor = juizo.valor.rstrip() + " Mantida em 2º grau (" + motivo + ")."
+        return campos
+    base = _campo_de_doc("decisao_juizo", SIM, "", d, trecho)
+    juizo.estado, juizo.motivo = SIM, ""
+    juizo.valor = (f"{rotulo} (2º grau: {motivo}; sugestão por regra; revisão humana pendente). "
+                   "Critério: condenação a pagar ou ressarcir é desfavorável; sem condenação é favorável.")
+    juizo.evidencia, juizo.localizacao, juizo.fonte = base.evidencia, base.localizacao, base.fonte
+    juizo.data_da_fonte, juizo.acesso_documento = base.data_da_fonte, base.acesso_documento
+    juizo.confianca, juizo.revisao = "regra", "pendente"
+    return campos
+
+
+def _decisao_1grau(p: Processo, parte_passiva: bool = False) -> list[Campo]:
     """Existência de sentença ou acórdão e sugestão de resultado pelo critério do cliente."""
     campos = _decisao_existencia(p)
     juizo = next(c for c in campos if c.campo == "decisao_juizo")

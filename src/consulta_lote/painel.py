@@ -124,6 +124,7 @@ def _faz_linha(el: dict, dj: dict | None, campos: dict | None, sistema_db: str |
         dj_valor = valorc("decisao_juizo")
         r["resultado"] = ("favorável (sugestão)" if dj_valor.startswith("FAVOR") else
                           "desfavorável (sugestão)" if dj_valor.startswith("DESFAVOR") else
+                          "acordo homologado (sugestão)" if dj_valor.startswith("ACORDO") else
                           "sem decisão registrada" if r["sentenca"] != "sim" else "a classificar")
         r["data_sentenca"] = campos.get("decisao", {}).get("data", "")
         r["transito"] = {"SIM": "sim", "NAO": "não"}.get(estado("transito_em_julgado"), "não visível")
@@ -133,7 +134,7 @@ def _faz_linha(el: dict, dj: dict | None, campos: dict | None, sistema_db: str |
         rev = {c.get("revisao", "pendente") for c in campos.values()}
         r["revisao"] = "conferido" if rev == {"conferido"} else ("pendente" if "pendente" in rev else "corrigido")
         r["acesso"] = sorted({c.get("acesso") for c in campos.values() if c.get("acesso") and c.get("estado") != NV}) or ["sem documento"]
-        pend = r["resultado"] in ("favorável (sugestão)", "desfavorável (sugestão)", "a classificar")
+        pend = r["resultado"] in ("favorável (sugestão)", "desfavorável (sugestão)", "acordo homologado (sugestão)", "a classificar")
     else:
         r.update(parte_alvo="-", sentenca="-", transito="-", pericia="-", acordo="-", desistencia="-", data_sentenca="",
                  data_transito="", revisao="-", acesso=["sem documento"], base_x_tribunal="indeterminado")

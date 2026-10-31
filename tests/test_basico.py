@@ -404,6 +404,62 @@ class TesteLegadoSentencaEmRecebimento(unittest.TestCase):
         self.assertEqual(estado(c, "decisao").estado, campos.NV)
 
 
+class TesteSegundoGrau(unittest.TestCase):
+    """O acórdão de 2º grau sobrepõe o resultado de 1º grau. Condenação mantida, mesmo reduzida, segue
+    DESFAVORÁVEL; recurso da ré totalmente provido vira FAVORÁVEL; recursos com resultados diferentes
+    (autor provido e ré desprovida) ficam para a revisão humana."""
+
+    SENT = "Isto posto, JULGO PARCIALMENTE PROCEDENTE O PEDIDO, condenando a ré EMPRESA ALFA SINTETICA LTDA ao pagamento."
+
+    def _proc(self, acordao):
+        nl = chr(10)
+        p = parser.ler(nl.join(["#! cnj: " + FICT1, "Eventos", ""]))
+        p.documentos.append(parser.Documento(rotulo="sentenca-1", texto="Dispositivo" + nl + self.SENT, acesso="publico"))
+        if acordao:
+            p.documentos.append(parser.Documento(rotulo="ev16-acordao2grau", texto=acordao, acesso="publico"))
+        return p
+
+    def _acordao(self, apelante, resultado):
+        nl = chr(10)
+        return nl.join(["APELAÇÃO CÍVEL Nº " + FICT1 + "/RJ", "APELANTE: " + apelante, "APELADO: OUTRA PARTE SINTETICA", "EMENTA", resultado])
+
+    def _juizo(self, p):
+        return next(c for c in campos.decisao(p, parte_passiva=True) if c.campo == "decisao_juizo")
+
+    def test_recurso_da_autora_provido_agrava(self):
+        j = self._juizo(self._proc(self._acordao("FULANO SINTETICO (AUTOR)", "SENTENÇA REFORMADA. RECURSO PARCIALMENTE PROVIDO.")))
+        self.assertTrue(j.valor.startswith("DESFAVORÁVEL"))
+        self.assertIn("2º grau", j.valor)
+        self.assertIn("PARCIALMENTE PROVIDO", j.evidencia)
+
+    def test_recurso_da_re_parcialmente_provido_mantem_condenacao(self):
+        j = self._juizo(self._proc(self._acordao("EMPRESA ALFA SINTETICA LTDA. (RÉU)", "REDUÇÃO DO VALOR DOS DANOS MORAIS. RECURSO PARCIALMENTE PROVIDO.")))
+        self.assertTrue(j.valor.startswith("DESFAVORÁVEL"))
+        self.assertIn("2º grau", j.valor)
+
+    def test_recurso_da_re_provido_vira_favoravel(self):
+        j = self._juizo(self._proc(self._acordao("EMPRESA ALFA SINTETICA LTDA. (RÉU)", "SENTENÇA REFORMADA. RECURSO PROVIDO.")))
+        self.assertTrue(j.valor.startswith("FAVORÁVEL"))
+        self.assertIn("2º grau", j.valor)
+
+    def test_recurso_da_re_desprovido_mantem(self):
+        j = self._juizo(self._proc(self._acordao("EMPRESA ALFA SINTETICA LTDA. (RÉU)", "CONHECER E NEGAR PROVIMENTO AO RECURSO, mantendo integralmente a sentença.")))
+        self.assertTrue(j.valor.startswith("DESFAVORÁVEL"))
+        self.assertIn("Mantida em 2º grau", j.valor)
+
+    def test_apelantes_dos_dois_polos_ficam_para_humano(self):
+        nl = chr(10)
+        ac = nl.join(["APELANTE: FULANO SINTETICO (AUTOR)", "APELANTE: EMPRESA ALFA SINTETICA LTDA. (RÉU)", "RECURSO DO AUTOR PROVIDO. RECURSO DA RÉ DESPROVIDO."])
+        j = self._juizo(self._proc(ac))
+        self.assertTrue(j.valor.startswith("DESFAVORÁVEL"))
+        self.assertNotIn("2º grau", j.valor)
+
+    def test_sem_acordao_continua_igual(self):
+        j = self._juizo(self._proc(None))
+        self.assertTrue(j.valor.startswith("DESFAVORÁVEL"))
+        self.assertNotIn("2º grau", j.valor)
+
+
 class TesteLacunasFaseEAcordo(unittest.TestCase):
     """Decisões do Luís (30/10): acordo homologado é categoria própria; fase inicial vira sugestão quando a
     lista de eventos está completa e não há citação, contestação, saneamento, sentença nem migração."""
