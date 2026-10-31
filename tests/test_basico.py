@@ -404,6 +404,43 @@ class TesteLegadoSentencaEmRecebimento(unittest.TestCase):
         self.assertEqual(estado(c, "decisao").estado, campos.NV)
 
 
+class TesteHistoricoMigrado(unittest.TestCase):
+    """Processo migrado: os eventos do sistema novo (eproc) vêm primeiro e o histórico do sistema antigo
+    (blocos 'Tipo do Movimento:') vem depois, no mesmo processo."""
+
+    def _txt(self):
+        nl = chr(10)
+        return nl.join([
+            "#! sistema: eproc", "#! cnj: " + FICT1, "#! movimentos_lista_completa: sim", "",
+            "Eventos", "Evento Data/Hora Descrição Usuário Documentos", "",
+            "2", "20/06/2025 10:00:00 Migrada a tramitação do processo para o sistema eletrônico",
+            "1", "19/06/2025 09:00:00 Autos incluídos no Juízo 100% Digital", "",
+            "=== HISTÓRICO DO SISTEMA ANTERIOR (legado) ===",
+            "Movimentação",
+            "Tipo do Movimento: Sentença", "Data da publicação:", "01/03/2025", "Descrição",
+            "JULGO PROCEDENTE o pedido para condenar a ré ao pagamento.",
+            "Tipo do Movimento: Distribuição Sorteio", "Data:", "10/01/2024", ""])
+
+    def test_junta_os_dois_historicos_com_o_novo_primeiro(self):
+        p = parser.ler(self._txt())
+        tipos = [m.tipo for m in p.movimentos]
+        self.assertTrue(any("Migrada" in t for t in tipos))
+        self.assertTrue(any("Sentença" in t for t in tipos))
+        self.assertLess(next(i for i, t in enumerate(tipos) if "Migrada" in t), next(i for i, t in enumerate(tipos) if "Sentença" in t))
+        self.assertEqual([m.indice for m in p.movimentos], list(range(len(p.movimentos))))
+
+    def test_fase_vem_da_sentenca_do_sistema_antigo(self):
+        f = estado(campos.extrair(parser.ler(self._txt()), []), "fase")
+        self.assertEqual(f.estado, campos.SIM)
+        self.assertEqual(f.valor, "sentenciado")
+        self.assertTrue(f.evidencia_confere)
+
+    def test_so_eproc_continua_igual(self):
+        nl = chr(10)
+        txt = nl.join(["#! sistema: eproc", "#! cnj: " + FICT1, "", "Eventos", "Evento Data/Hora Descrição Usuário Documentos", "", "1", "19/06/2025 09:00:00 Distribuído por sorteio", ""])
+        self.assertEqual(len(parser.ler(txt).movimentos), 1)
+
+
 class TesteSegundoGrau(unittest.TestCase):
     """O acórdão de 2º grau sobrepõe o resultado de 1º grau. Condenação mantida, mesmo reduzida, segue
     DESFAVORÁVEL; recurso da ré totalmente provido vira FAVORÁVEL; recursos com resultados diferentes

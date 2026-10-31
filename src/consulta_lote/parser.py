@@ -368,7 +368,12 @@ def ler(texto_bruto: str) -> Processo:
     if md:
         dist = md.group(1)
 
-    eventos = _extrai_movimentos(corpo) or _extrai_movimentos_pje(corpo) or _extrai_eventos_eproc(corpo)
+    antigo = _extrai_movimentos(corpo)  # blocos "Tipo do Movimento:" (portal do sistema legado)
+    novo = _extrai_movimentos_pje(corpo) or _extrai_eventos_eproc(corpo)
+    # Processo migrado: eventos do sistema novo primeiro e, depois, o histórico do sistema antigo.
+    eventos = (novo + antigo) if (antigo and novo) else (antigo or novo)
+    for i, mv in enumerate(eventos):
+        mv.indice = i
     return Processo(
         cnj=cnj,
         meta=meta,
