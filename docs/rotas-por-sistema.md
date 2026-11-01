@@ -47,6 +47,15 @@ que use estes sistemas. Cada usuário responde pelos termos de uso do tribunal q
   dá lista truncada (na leitura real, 170 de 174 cópias vieram assim e 83 nem chegavam à
   distribuição). Marque `#! movimentos_lista_completa: sim` **só** depois de rolar tudo.
   Leitura de comprimento 0 significa "ainda renderizando".
+- **Consulta pública do PJe (sem login):** a busca por número devolve capa, partes e
+  movimentos; o detalhe abre numa janela (`openPopUp` com um token por consulta). O texto de
+  cada peça visível vem em HTML por um endereço `documentoSemLoginHTML`. **Os movimentos são
+  paginados** (cerca de 15 por página, controle deslizante `rich-inslider`, uma chamada A4J):
+  ler só a primeira página trunca a lista. Para trocar de página na janela aberta (não dentro de
+  `iframe`, onde não funcionou): gravar o número no campo de texto do formulário do controle,
+  disparar `change` no campo, disparar o evento `submit` no formulário e chamar
+  `form.submit()`; esperar a primeira linha da tabela mudar. O total de páginas está no último
+  número do controle. Processo em segredo de justiça não aparece na consulta pública.
 - **Peças:** abrem por clique na linha do tempo. O corpo da peça pode estar num quadro interno
   que não sai no texto da página. Peça em PDF sem texto exige OCR (item 5).
 - **Download dos autos:** gera um PDF único com todos os documentos, texto pesquisável e rodapé
@@ -67,6 +76,24 @@ que use estes sistemas. Cada usuário responde pelos termos de uso do tribunal q
   segundos) e a tabela dá autor e réu por coluna.
 - **Peça por evento** (sentença, decisão, certidão, acórdão): abre sem segundo fator para
   processo em que o advogado não consta. Petição inicial e laudo não aparecem como peça.
+- **Texto da peça vem por AJAX, não no HTML do link.** O endereço do link (`acessar_documento`)
+  devolve só a moldura da página (cabeçalho, botões, quase nenhum texto: na leitura real, 5
+  caracteres). O texto vem de uma segunda chamada, feita pelo script `start()` da própria
+  página: `controlador.php?acao=acessar_documento_implementacao&doc=...&evento=...&key=...`.
+  Para ler sem abrir aba: (1) `fetch` do link da peça; (2) extrair do HTML a URL com
+  `acessar_documento_implementacao` (expressão `url:\s*"(...)"`, relativa ao link); (3) `fetch`
+  dessa URL com `credentials:'include'`; (4) pôr o HTML numa `div` fora da tela e ler `innerText`
+  (preserva parágrafos). Decodificar a resposta por bytes: tenta UTF-8 estrito e, se falhar,
+  `windows-1252` (a página declara ISO-8859-1). Não procure um `iframe` estático: em alguns
+  tribunais ele não existe no HTML.
+- **Rótulo da peça repete por evento:** `DEC1` e `SENT1` valem por evento, não por processo. Um
+  processo com várias decisões tem vários `DEC1`. Leia todos os links da coluna Documentos.
+- **Sessão expira por inatividade** (de madrugada, em leitura parada): o navegador mostra um
+  alerta ("sessão encerrada") que bloqueia a aba e a ferramenta até alguém fechar. Só a pessoa
+  entra de novo. Mantenha a aba na frente e o laço andando.
+- **Segredo de justiça nível 1:** a capa abre, mas a lista de eventos vem **vazia** (texto de
+  uns 1,2 mil caracteres, com a marca "Segredo de Justiça"). Não importe como leitura completa:
+  separe numa lista de sigilosos.
 - **Íntegra dos autos:** caixa de interesse com registro **e** código de 6 dígitos do aplicativo
   de autenticação. Só a pessoa titular digita, a cada processo. Não há como automatizar.
   Liberada, oferece "Download Completo" (ZIP enviado por e-mail).
