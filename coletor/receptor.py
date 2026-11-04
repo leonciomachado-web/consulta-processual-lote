@@ -8,12 +8,19 @@ Rotas (POST):
   /salvar-docs?nome=<CNJ>[__sufixo]  JSON das peças  -> <dados>/entrada/_recebido_docs/<nome>.json
   /salvar-pdf?nome=<CNJ>&arq=<id>-<tipo>  PDF        -> <dados>/processos/<CNJ>/fontes/<arq>.pdf
 
-Uso: python -I coletor/receptor.py --dados <pasta-fora-do-repo> [--porta 18765] [--minutos 150]
+Proteção contra outras páginas do navegador: cada POST precisa vir de uma origem listada em
+--origem (a do sistema que a pessoa abriu) e trazer o token da sessão (parâmetro t=), impresso ao
+iniciar. O token muda a cada execução. Sem isso, qualquer site aberto poderia gravar aqui.
+
+Uso: python -I coletor/receptor.py --dados <pasta-fora-do-repo> --origem https://<sistema> [--origem ...]
+     [--porta 18765] [--minutos 150]
 """
 import argparse
+import hmac
 import http.server
 import pathlib
 import re
+import secrets
 import threading
 import time
 import urllib.parse
@@ -29,7 +36,11 @@ def main():
     ap.add_argument("--dados", required=True, type=pathlib.Path)
     ap.add_argument("--porta", type=int, default=18765)
     ap.add_argument("--minutos", type=int, default=150)
+    ap.add_argument("--origem", action="append", required=True,
+                    help="origem permitida, ex.: https://sistema.exemplo (repita para mais de uma)")
     a = ap.parse_args()
+    permitidas = {o.rstrip("/") for o in a.origem}
+    token = secrets.token_urlsafe(24)
 
     dados = a.dados.resolve()
     repo = pathlib.Path(__file__).resolve().parent.parent
@@ -42,10 +53,23 @@ def main():
         p.mkdir(parents=True, exist_ok=True)
 
     class H(http.server.BaseHTTPRequestHandler):
+        def _origem_ok(self):
+            host_ok = self.headers.get("Host", "") in (f"127.0.0.1:{a.porta}", f"localhost:{a.porta}")
+            return host_ok and self.headers.get("Origin", "").rstrip("/") in permitidas
+
+        @staticmethod
+        def _gravar(alvo, corpo):
+            """Não sobrescreve em silêncio: o arquivo anterior vira <nome>.anterior."""
+            if alvo.exists():
+                alvo.replace(alvo.with_name(alvo.name + ".anterior"))
+            alvo.write_bytes(corpo)
+
         def _cors(self):
-            self.send_header("Access-Control-Allow-Origin", "*")
+            if self._origem_ok():
+                self.send_header("Access-Control-Allow-Origin", self.headers["Origin"].rstrip("/"))
+                self.send_header("Vary", "Origin")
             self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
-            self.send_header("Access-Control-Allow-Headers", "*")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
 
         def _fim(self, codigo, corpo=b""):
             self.send_response(codigo)
@@ -55,12 +79,14 @@ def main():
                 self.wfile.write(corpo)
 
         def do_OPTIONS(self):
-            self._fim(204)
+            self._fim(204 if self._origem_ok() else 403)
 
         def do_POST(self):
             q = urllib.parse.urlparse(self.path)
             par = urllib.parse.parse_qs(q.query)
             nome = par.get("nome", [""])[0]
+            if not self._origem_ok() or not hmac.compare_digest(par.get("t", [""])[0], token):
+                return self._fim(403)
             n = int(self.headers.get("Content-Length", 0))
             if q.path == "/salvar-pdf":
                 arq = par.get("arq", [""])[0]
@@ -71,19 +97,20 @@ def main():
                     return self._fim(415)
                 destino = pasta_proc / nome / "fontes"
                 destino.mkdir(parents=True, exist_ok=True)
-                (destino / f"{arq}.pdf").write_bytes(corpo)
+                self._gravar(destino / f"{arq}.pdf", corpo)
                 return self._fim(200, b"ok")
             if q.path not in ("/salvar", "/salvar-docs") or not re.fullmatch(REGEX_NOME, nome):
                 return self._fim(400)
             corpo = self.rfile.read(n)
             alvo = pasta_docs / f"{nome}.json" if q.path == "/salvar-docs" else pasta_txt / f"{nome}.txt"
-            alvo.write_bytes(corpo)
+            self._gravar(alvo, corpo)
             self._fim(200, b"ok")
 
         def log_message(self, *args):
             pass
 
     srv = http.server.ThreadingHTTPServer(("127.0.0.1", a.porta), H)
+    print(f"Receptor em 127.0.0.1:{a.porta}. Token da sessão (use como t=<token> nas URLs): {token}", flush=True)
     fim = time.time() + a.minutos * 60
     threading.Thread(target=lambda: (time.sleep(max(0, fim - time.time())), srv.shutdown()), daemon=True).start()
     srv.serve_forever()

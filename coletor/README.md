@@ -27,7 +27,7 @@ processo, em vez de copiar e colar à mão.
 ## Fluxo
 
 ```bash
-python -I coletor/receptor.py --dados <pasta-fora-do-repo>      # terminal 1
+python -I coletor/receptor.py --dados <pasta-fora-do-repo> --origem https://<sistema>   # terminal 1; imprime o token
 # no navegador, já logado: rodar o laço de laco-no-navegador.md
 python -I coletor/organizar_processos.py --dados <pasta> --gravar
 ```

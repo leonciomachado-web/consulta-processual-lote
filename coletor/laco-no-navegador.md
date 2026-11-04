@@ -17,10 +17,13 @@ seletores no seu caso.
   JSON dentro de string. No Python: `d = json.load(f); d = json.loads(d) if isinstance(d, str) else d`.
 - Documento em PDF abre num visualizador que não dá texto limpo: baixe o PDF (próxima seção).
 
+O receptor só aceita POST da origem informada em `--origem` e com o token da sessão (muda a cada
+execução). `TOKEN` é definido na primeira linha do bloco abaixo; `enviarPdf` usa a mesma constante.
+
 ## Texto da tela para o receptor
 
 ```js
-const PORTA = 18765, w = ms => new Promise(r => setTimeout(r, ms));
+const PORTA = 18765, TOKEN = '<token impresso pelo receptor>', w = ms => new Promise(r => setTimeout(r, ms));
 window.__fila = [/* números CNJ */]; window.__i = 0; window.__res = [];
 window.__rodar = async (maxMs = 36000) => {
   const campo = [...document.querySelectorAll('input[type=search]')].find(x => x.offsetParent !== null);
@@ -31,7 +34,7 @@ window.__rodar = async (maxMs = 36000) => {
     // 2) esperar até o título começar por num e o texto passar de ~800 caracteres
     if (!document.title.startsWith(num + ' ')) { window.__res.push([num, 'titulo_errado']); window.__i++; continue; }
     const tx = document.body.innerText;
-    await fetch(`http://127.0.0.1:${PORTA}/salvar?nome=${num}`, { method: 'POST', mode: 'no-cors', body: tx });
+    await fetch(`http://127.0.0.1:${PORTA}/salvar?nome=${num}&t=${TOKEN}`, { method: 'POST', mode: 'no-cors', body: tx });
     window.__res.push([num, 'ok', tx.length]); window.__i++; await w(2500);
   }
   return [window.__i, window.__fila.length, window.__res.slice(-10)];
@@ -49,7 +52,7 @@ async function enviarPdf(cnj, idPeca, tipo, urlDaPeca) {
   const buf = await r.arrayBuffer();
   const ini = new TextDecoder().decode(buf.slice(0, 4));
   if (ini !== '%PDF') return [cnj, idPeca, 'nao_e_pdf'];   // o receptor também recusa
-  await fetch(`http://127.0.0.1:${PORTA}/salvar-pdf?nome=${cnj}&arq=${idPeca}-${tipo}`,
+  await fetch(`http://127.0.0.1:${PORTA}/salvar-pdf?nome=${cnj}&arq=${idPeca}-${tipo}&t=${TOKEN}`,
               { method: 'POST', mode: 'no-cors', body: buf });
   return [cnj, idPeca, 'ok', buf.byteLength];
 }
