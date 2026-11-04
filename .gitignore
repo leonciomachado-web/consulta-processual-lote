@@ -14,6 +14,8 @@
 !/examples/**
 !/scripts/
 !/scripts/**
+!/coletor/
+!/coletor/**
 !termos_proibidos.example.txt
 # mesmo dentro das pastas liberadas, nunca entram:
 __pycache__/

@@ -4,9 +4,13 @@ Organiza o texto de processos judiciais que **uma pessoa copiou da tela**, extra
 sete informações com trecho literal de evidência e monta uma planilha de análise para revisão
 humana.
 
-> **O programa não acessa sites de tribunal.** A entrada é texto que a própria pessoa copia e
-> cola num arquivo `.txt`. Cada usuário responde pelo cumprimento dos termos de uso do tribunal
-> que consulta e pela proteção dos dados pessoais que manipula.
+> **O programa de análise (`src/`) não acessa sites de tribunal.** A entrada é texto que a própria
+> pessoa copia e cola num arquivo `.txt`. O diretório [`coletor/`](coletor/README.md) traz peças
+> **opcionais e separadas** para quem quer guardar a tela e as peças já abertas no navegador, logado
+> pela própria pessoa. Elas não digitam credencial, não contornam segundo fator e não aceitam avisos
+> do sistema. Cada usuário responde pelo cumprimento dos termos de uso do tribunal que consulta
+> (muitos proíbem acesso automatizado sem autorização escrita) e pela proteção dos dados pessoais
+> que manipula.
 >
 > **Este repositório é só o programa.** Dados de processos (textos colados, banco, planilhas,
 > logs) ficam **só na máquina local**, numa pasta fora do repositório. O programa recusa rodar
