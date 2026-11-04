@@ -78,7 +78,11 @@ Se um documento abriu sem login, cole o texto entre `=== INTEGRA rótulo ===` e 
 
 - Pasta de dados fora do repositório; se estiver dentro de outro repositório git, precisa estar
   ignorada por ele. Na dúvida, recusa.
-- Nenhum envio de texto a serviço externo. O programa não tem LLM nem rede.
+- Nenhum texto de processo sai da máquina e o programa não tem LLM. A rede só é usada pelos subcomandos
+  opcionais `datajud` e `levantamento`: eles consultam a API pública do CNJ (`api-publica.datajud.cnj.jus.br`)
+  com a chave pública do próprio usuário (arquivo local), enviam só o número do processo no endereço da
+  consulta e guardam a resposta numa pasta local. Sem esses subcomandos, nada usa a rede.
+  O `coletor/` (opcional) só escuta em `127.0.0.1`.
 - Número do processo no banco é local; o identificador interno é HMAC com segredo local.
 - `.gitignore` de negação por padrão e ganchos de commit que bloqueiam termos proibidos e
   números de processo (veja abaixo).
