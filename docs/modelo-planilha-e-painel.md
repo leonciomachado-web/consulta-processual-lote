@@ -22,6 +22,8 @@ python -m consulta_lote modelo    # os mesmos arquivos com processos inventados 
 As sete perguntas: parte-alvo no polo passivo; fase; perícia (e laudo); acordo; desistência ou renúncia;
 sentença ou acórdão (e resultado); trânsito em julgado com data.
 
+**Quais partes-alvo.** Com `partes_alvo` em forma de rótulos (veja `examples/partes_alvo.example.yaml`), a planilha e o painel ganham a coluna e o filtro "Quais partes-alvo no polo passivo", com `Somente X`, `Somente Y` ou `X e Y` (na ordem da configuração) e `nenhuma` quando a lista completa não traz nenhuma. Cada parte tem também o seu próprio campo (`parte_alvo_passivo__<rotulo>`) no banco, com trecho literal de evidência. A lista simples de textos continua valendo e só responde sim ou não.
+
 ## Painel (`painel.html`)
 
 Arquivo único, sem biblioteca externa nem rede, para abrir offline. Tem cartões de totais, gráficos de barras

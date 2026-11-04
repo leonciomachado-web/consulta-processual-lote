@@ -1198,5 +1198,48 @@ class TesteDatajudDireto(unittest.TestCase):
         self.assertIn("2º grau", l["proximo_passo"])
 
 
+class TestePartesAlvoRotuladas(unittest.TestCase):
+    """Com rótulos, o resultado diz QUAIS partes-alvo estão no polo passivo (só uma, só a outra ou as duas)."""
+    ALVOS = [{"rotulo": "Alfa", "nomes": ["EMPRESA ALFA"]}, {"rotulo": "Beta", "nomes": ["EMPRESA BETA"]}]
+
+    def _extrair(self, reus, alvos=None):
+        nl = chr(10)
+        linhas = ["#! cnj: " + FICT1, "#! partes_lista_completa: sim", "Dados dos Personagens", "Autor", "FULANO DE TAL SINTETICO"]
+        for r in reus:
+            linhas += ["Réu", r]
+        linhas += ["Movimentação", ""]
+        return campos.extrair(parser.ler(nl.join(linhas)), alvos if alvos is not None else self.ALVOS)
+
+    def test_so_alfa(self):
+        cs = self._extrair(["EMPRESA ALFA SINTETICA LTDA", "OUTRA EMPRESA LTDA"])
+        c = estado(cs, "parte_alvo_no_polo_passivo")
+        self.assertEqual((c.estado, c.valor), (campos.SIM, "Somente Alfa"))
+        self.assertEqual(estado(cs, "parte_alvo_passivo__alfa").estado, campos.SIM)
+        self.assertEqual(estado(cs, "parte_alvo_passivo__beta").estado, campos.NAO)
+
+    def test_so_beta(self):
+        c = estado(self._extrair(["EMPRESA BETA SINTETICA SA"]), "parte_alvo_no_polo_passivo")
+        self.assertEqual((c.estado, c.valor), (campos.SIM, "Somente Beta"))
+
+    def test_as_duas(self):
+        cs = self._extrair(["EMPRESA BETA SINTETICA SA", "EMPRESA ALFA SINTETICA LTDA"])
+        c = estado(cs, "parte_alvo_no_polo_passivo")
+        self.assertEqual((c.estado, c.valor), (campos.SIM, "Alfa e Beta"))   # ordem da configuração, não do texto
+        for k in ("alfa", "beta"):
+            g = estado(cs, "parte_alvo_passivo__" + k)
+            self.assertEqual(g.estado, campos.SIM)
+            self.assertTrue(g.evidencia_confere and g.evidencia)
+
+    def test_nenhuma(self):
+        cs = self._extrair(["OUTRA EMPRESA LTDA"])
+        self.assertEqual(estado(cs, "parte_alvo_no_polo_passivo").estado, campos.NAO)
+
+    def test_lista_simples_continua_igual(self):
+        cs = self._extrair(["EMPRESA ALFA SINTETICA LTDA"], alvos=["EMPRESA ALFA", "EMPRESA BETA"])
+        c = estado(cs, "parte_alvo_no_polo_passivo")
+        self.assertEqual((c.estado, c.valor), (campos.SIM, "parte-alvo no polo passivo"))
+        self.assertFalse([x for x in cs if x.campo.startswith("parte_alvo_passivo__")])
+
+
 if __name__ == "__main__":
     unittest.main()

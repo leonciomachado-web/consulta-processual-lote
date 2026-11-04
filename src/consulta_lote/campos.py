@@ -199,7 +199,30 @@ def _personagens_de_documentos(p: Processo) -> list[Personagem]:
     return out
 
 
-def partes(p: Processo, partes_alvo: list[str]) -> Campo:
+def _grupos(partes_alvo: list) -> list[tuple[str, list[str]]]:
+    """Normaliza a configuração: texto simples (rótulo = o próprio texto) ou
+    {rotulo: "Nome curto", nomes: ["trecho do nome", ...]}."""
+    grupos: list[tuple[str, list[str]]] = []
+    for a in partes_alvo:
+        if isinstance(a, dict):
+            nomes = a.get("nomes") or []
+            nomes = [nomes] if isinstance(nomes, str) else [str(n) for n in nomes]
+            if nomes:
+                grupos.append((str(a.get("rotulo") or nomes[0]), nomes))
+        else:
+            grupos.append((str(a), [str(a)]))
+    return grupos
+
+
+def nomes_planos(partes_alvo: list) -> list[str]:
+    return [n for _, ns in _grupos(partes_alvo) for n in ns]
+
+
+def _slug(rotulo: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", norm(rotulo)).strip("_") or "parte"
+
+
+def partes(p: Processo, partes_alvo: list) -> Campo:
     if not partes_alvo:
         return _nv("parte_alvo_no_polo_passivo", "nao_consultado", "nenhuma parte-alvo configurada")
     de_documento = not p.personagens
@@ -209,7 +232,7 @@ def partes(p: Processo, partes_alvo: list[str]) -> Campo:
         personagens += [x for x in _personagens_de_documentos(p) if norm(x.nome) not in ja]
     if not personagens:
         return _nv("parte_alvo_no_polo_passivo", "nao_consultado", "lista de partes não colada; abra a aba de partes")
-    alvos = [norm(a) for a in partes_alvo]
+    alvos = [norm(a) for a in nomes_planos(partes_alvo)]
     for per in personagens:
         if per.polo == "passivo" and any(a in norm(per.nome) for a in alvos):
             return Campo(
@@ -333,9 +356,9 @@ def _evidencia_de_decisao(mv: Movimento) -> str | None:
     return None
 
 
-def parte_citada(p: Processo, partes_alvo: list[str]) -> Campo:
+def parte_citada(p: Processo, partes_alvo: list) -> Campo:
     """A parte-alvo aparece no texto (por exemplo, 'decorrido prazo de ...'), sem dizer o polo."""
-    alvos = [norm(a) for a in partes_alvo]
+    alvos = [norm(a) for a in nomes_planos(partes_alvo)]
     for mv in p.movimentos:
         for linha in mv.texto.split("\n"):
             if any(a in norm(linha) for a in alvos):
@@ -714,9 +737,22 @@ def mascara_cpf(texto: str) -> str:
     return protegido
 
 
-def extrair(p: Processo, partes_alvo: list[str]) -> list[Campo]:
+def extrair(p: Processo, partes_alvo: list) -> list[Campo]:
     pc = partes(p, partes_alvo)
-    campos: list[Campo] = [pc, parte_citada(p, partes_alvo), fase(p)]
+    por_parte: list[Campo] = []
+    grupos = _grupos(partes_alvo)
+    if len(grupos) > 1 and any(isinstance(a, dict) for a in partes_alvo):
+        # com rótulos: diz QUAIS partes-alvo estão no polo passivo (cada uma com evidência própria)
+        achadas: list[str] = []
+        for rotulo, nomes in grupos:
+            g = partes(p, nomes)
+            g.campo = "parte_alvo_passivo__" + _slug(rotulo)
+            por_parte.append(g)
+            if g.estado == SIM:
+                achadas.append(rotulo)
+        if pc.estado == SIM and achadas:
+            pc.valor = ("Somente " + achadas[0]) if len(achadas) == 1 else " e ".join(achadas)
+    campos: list[Campo] = [pc, *por_parte, parte_citada(p, partes_alvo), fase(p)]
     campos += pericia(p)
     campos += [acordo(p), desistencia(p)]
     campos += decisao(p, parte_passiva=pc.estado == SIM)

@@ -32,6 +32,7 @@ COLUNAS = [
     ("Rito", "rito", 16), ("Comarca", "comarca", 18), ("Ano", "ano", 6), ("Valor da causa", "valor_causa", 14),
     ("Fase na base do cliente", "fase_base", 26), ("Fase no tribunal", "fase_tribunal", 22),
     ("Base x tribunal", "base_x_tribunal", 16), ("Parte-alvo no polo passivo", "parte_alvo", 14),
+    ("Quais partes-alvo no polo passivo", "partes_quais", 18),
     ("Sentença ou acórdão", "sentenca", 14), ("Resultado da decisão (sugestão)", "resultado", 22),
     ("Data da sentença", "data_sentenca", 12), ("Trânsito em julgado", "transito", 12), ("Data do trânsito", "data_transito", 30),
     ("Perícia", "pericia", 10), ("Acordo", "acordo", 10), ("Desistência ou renúncia", "desistencia", 12),

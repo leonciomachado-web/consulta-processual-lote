@@ -36,7 +36,7 @@ FILTROS = [
     ("resultado", "Resultado da decisão (critério do cliente)"), ("sentenca", "Sentença ou acórdão"),
     ("transito", "Trânsito em julgado"), ("pericia", "Perícia"), ("acordo", "Acordo"),
     ("desistencia", "Desistência ou renúncia"), ("parte_alvo", "Parte-alvo no polo passivo"),
-    ("proximo_cat", "Próximo passo"), ("revisao", "Revisão humana"), ("acesso", "Acesso dos documentos"),
+    ("partes_quais", "Quais partes-alvo no polo passivo"), ("proximo_cat", "Próximo passo"), ("revisao", "Revisão humana"), ("acesso", "Acesso dos documentos"),
     ("tipo_pasta", "Tipo da pasta"), ("rito", "Rito"), ("tipo_acao", "Tipo de ação"), ("comarca", "Comarca"),
     ("ano", "Ano do processo"), ("faixa_valor", "Valor da causa"), ("atividade", "Atividade atual (base)"),
     ("motivo_acao", "Motivo da ação (base)"),
@@ -110,6 +110,7 @@ def _faz_linha(el: dict, dj: dict | None, campos: dict | None, sistema_db: str |
                                                           ("não achado no DataJud" if dj else "não consultado"))
     r["sistema"] = (sistema_db if analisado and sistema_db and sistema_db != "nao_informado" else d.get("sistema_provavel")) or "desconhecido"
     r["campos"] = {}
+    r["partes_quais"] = "-"
     estado = lambda k: (campos or {}).get(k, {}).get("estado")
     valorc = lambda k: (campos or {}).get(k, {}).get("valor", "")
     if analisado:
@@ -120,6 +121,9 @@ def _faz_linha(el: dict, dj: dict | None, campos: dict | None, sistema_db: str |
         r["base_x_tribunal"] = compara_fase(fase_base, Campo(campo="fase", estado=fase_c.get("estado", NV), valor=fase_c.get("valor", "")))
         pa = estado("parte_alvo_no_polo_passivo")
         r["parte_alvo"] = {"SIM": "sim", "NAO": "não"}.get(pa, "não visível")
+        pq = valorc("parte_alvo_no_polo_passivo")  # com rótulos: "Somente X", "Somente Y" ou "X e Y"; senão texto genérico
+        r["partes_quais"] = (("sim" if pq.startswith("parte-alvo") else pq) if pa == "SIM"
+                             else "nenhuma" if pa == "NAO" else "não visível")
         r["sentenca"] = {"SIM": "sim", "NAO": "não"}.get(estado("decisao"), "não visível")
         dj_valor = valorc("decisao_juizo")
         r["resultado"] = ("favorável (sugestão)" if dj_valor.startswith("FAVOR") else

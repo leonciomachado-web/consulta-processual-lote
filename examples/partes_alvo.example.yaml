@@ -1,4 +1,15 @@
 # Copie para a pasta de dados local como partes_alvo.local.yaml e troque pelos nomes reais.
-# Este arquivo é só um exemplo, com nome inventado. O programa compara por trecho do nome.
+# Este arquivo é só um exemplo, com nomes inventados. O programa compara por trecho do nome.
+#
+# Forma simples (uma lista de trechos): o resultado diz só "sim" ou "não".
+#   partes_alvo:
+#     - "EMPRESA ALFA"
+#
+# Forma com rótulos: o resultado diz QUAIS partes estão no polo passivo
+# ("Somente Alfa", "Somente Beta" ou "Alfa e Beta"). Cada parte ganha também o seu próprio campo,
+# com trecho literal de evidência. Os nomes variam: liste cada trecho em "nomes".
 partes_alvo:
-  - "EMPRESA ALFA"
+  - rotulo: "Alfa"
+    nomes: ["EMPRESA ALFA"]
+  - rotulo: "Beta"
+    nomes: ["EMPRESA BETA"]
