@@ -56,6 +56,9 @@ que use estes sistemas. Cada usuário responde pelos termos de uso do tribunal q
   disparar `change` no campo, disparar o evento `submit` no formulário e chamar
   `form.submit()`; esperar a primeira linha da tabela mudar. O total de páginas está no último
   número do controle. Processo em segredo de justiça não aparece na consulta pública.
+- **CPF/CNPJ completo no texto da peça:** na consulta pública do PJe, o corpo da decisão pode trazer o
+  documento das partes **sem máscara**, mesmo quando a tela de partes já o mascara. Mascare antes de
+  gravar (o programa faz isso na importação) e confira os arquivos de saída antes de compartilhar.
 - **Peças:** abrem por clique na linha do tempo. O corpo da peça pode estar num quadro interno
   que não sai no texto da página. Peça em PDF sem texto exige OCR (item 5).
 - **Download dos autos:** gera um PDF único com todos os documentos, texto pesquisável e rodapé
@@ -68,6 +71,13 @@ que use estes sistemas. Cada usuário responde pelos termos de uso do tribunal q
   sugestão para revisão humana.
 
 ## 3. eproc
+
+- **Consulta pública do eproc:** pode exigir **CAPTCHA de imagem** na busca por número, por nome, por
+  CPF/CNPJ ou por OAB, e a consulta de documento por chave pede o mesmo CAPTCHA. **Pare ali.** O programa
+  e o coletor não resolvem CAPTCHA. Saídas: a pessoa digita a cada consulta; usa o acesso logado do
+  advogado (a tela de detalhes entrega todos os eventos numa página); ou fica só com o DataJud (movimentos
+  por código, sem texto). O mesmo tribunal pode ter PJe público sem CAPTCHA e eproc público com CAPTCHA:
+  confira por sistema, pelo prefixo do número, antes de montar o lote.
 
 - **Busca por número no cabeçalho** abre "Detalhes do Processo" sem aviso: classe, órgão,
   partes e representantes (com CPF/CNPJ e OAB), e **todos os eventos numa página** (evento

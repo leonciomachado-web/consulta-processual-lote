@@ -15,6 +15,10 @@ seletores no seu caso.
 - **A sessão expira** após minutos parada: se o laço cair na tela de login, a pessoa entra de novo.
 - **O `JSON.stringify` pode ser sobrescrito pela página** (Prototype.js): o corpo pode chegar como
   JSON dentro de string. No Python: `d = json.load(f); d = json.loads(d) if isinstance(d, str) else d`.
+- **O envio ao receptor pode ficar pendurado** em alguns navegadores (permissão de rede local: página pública
+  chamando `127.0.0.1`). O receptor já responde ao pedido de verificação prévia com
+  `Access-Control-Allow-Private-Network: true`. Se ainda travar, grave o resultado pela ferramenta do
+  navegador (salvar em arquivo) e converta depois, em vez de enviar pela rede.
 - Documento em PDF abre num visualizador que não dá texto limpo: baixe o PDF (próxima seção).
 
 O receptor só aceita POST da origem informada em `--origem` e com o token da sessão (muda a cada

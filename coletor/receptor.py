@@ -69,6 +69,8 @@ def main():
                 self.send_header("Access-Control-Allow-Origin", self.headers["Origin"].rstrip("/"))
                 self.send_header("Vary", "Origin")
             self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+            if self._origem_ok() and self.headers.get("Access-Control-Request-Private-Network"):
+                self.send_header("Access-Control-Allow-Private-Network", "true")
             self.send_header("Access-Control-Allow-Headers", "Content-Type")
 
         def _fim(self, codigo, corpo=b""):
